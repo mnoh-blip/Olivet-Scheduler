@@ -457,7 +457,7 @@
                 <option value="9">Grade 9</option>
                 <option value="10">Grade 10</option>
                 <option value="11">Grade 11</option>
-                <option value="12">Grade 12</option>
+                <option value="12" selected>Grade 12</option>
             </select>
         </div>
 
@@ -545,23 +545,6 @@
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
-    /*
-     * [보안 가이드] Firebase Security Rules (Firebase Console의 Firestore Database > 규칙에 작성해야함):
-     *
-     * rules_version = '2';
-     * service cloud.firestore {
-     *   match /databases/{database}/documents {
-     *     match /schedulerData/{document} {
-     *       allow read: if request.auth != null;
-     *       allow write: if request.auth != null && (
-     *         request.auth.token.email.matches(".*@olivetacademy\\.org$") || 
-     *         request.auth.token.email.matches(".*@olivetacademy\\.com$")
-     *       );
-     *     }
-     *   }
-     * }
-     */
-
     const firebaseConfig = {
         apiKey: "AIzaSyDdaoNHitc3Z3vSrhyv0gmtfMsEACk4vGc",
         authDomain: "olivet-scheduler.firebaseapp.com",
@@ -575,7 +558,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
-    window.firebaseAuth = auth; // 전역 바인딩을 통해 권한 상태 검증 강화
+    window.firebaseAuth = auth;
 
     window.dbSaveData = async function(key, data) {
         try {
@@ -594,6 +577,82 @@
             }
         });
     };
+
+    // 실시간 동기화 설정 함수
+    window.initRealtimeSync = function() {
+        const syncKeys = [
+            'meals', 'meal_sticker_votes', 'cooking', 'cleaning',
+            'girlsDormData', 'boysDormData', 'activity_logs'
+        ];
+
+        // 기본 항목 리스너 등록
+        syncKeys.forEach(key => {
+            window.dbListenData(key, (remoteVal) => {
+                if (remoteVal !== null) {
+                    const localVal = localStorage.getItem('olivet_' + key);
+                    const remoteJson = JSON.stringify(remoteVal);
+                    if (localVal !== remoteJson) {
+                        localStorage.setItem('olivet_' + key, remoteJson);
+                        refreshUIByKey(key);
+                    }
+                }
+            });
+        });
+
+        // 학년별 시간표 & 메모 리스너 등록
+        [6, 7, 8, 9, 10, 11, 12].forEach(g => {
+            const schedKey = `schedule_g${g}`;
+            window.dbListenData(schedKey, (remoteVal) => {
+                if (remoteVal !== null) {
+                    const localVal = localStorage.getItem('olivet_' + schedKey);
+                    const remoteJson = JSON.stringify(remoteVal);
+                    if (localVal !== remoteJson) {
+                        localStorage.setItem('olivet_' + schedKey, remoteJson);
+                        const curGrade = document.getElementById('gradeSelect')?.value;
+                        if (String(curGrade) === String(g) && !document.activeElement.classList.contains('auto-expand')) {
+                            window.loadScheduleAndSideNotes();
+                        }
+                    }
+                }
+            });
+
+            ['sideBring', 'sideAnnounce', 'sideTodo', 'sideTodoGreen'].forEach(sideId => {
+                const sideKey = `side_${sideId}_g${g}`;
+                window.dbListenData(sideKey, (remoteVal) => {
+                    if (remoteVal !== null) {
+                        const localVal = localStorage.getItem('olivet_' + sideKey);
+                        if (localVal !== JSON.stringify(remoteVal)) {
+                            localStorage.setItem('olivet_' + sideKey, JSON.stringify(remoteVal));
+                            const curGrade = document.getElementById('gradeSelect')?.value;
+                            if (String(curGrade) === String(g)) {
+                                const elem = document.getElementById(sideId);
+                                if (elem && document.activeElement !== elem) {
+                                    elem.value = remoteVal;
+                                    if (window.autoResizeTextarea) window.autoResizeTextarea(elem, 80);
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        });
+    };
+
+    function refreshUIByKey(key) {
+        if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+
+        if (key === 'meals' || key === 'meal_sticker_votes') {
+            if (window.initMeals) window.initMeals();
+        } else if (key === 'cooking') {
+            if (window.initCooking) window.initCooking();
+        } else if (key === 'cleaning') {
+            if (window.initCleaning) window.initCleaning();
+        } else if (key === 'girlsDormData' || key === 'boysDormData') {
+            if (window.initDormTables) window.initDormTables();
+        } else if (key === 'activity_logs') {
+            if (window.renderLogs) window.renderLogs();
+        }
+    }
 
     window.handleGoogleLogin = async function() {
         const currentUser = window.getData ? window.getData('auth_user', null) : null;
@@ -649,6 +708,7 @@
             if (window.saveData) window.saveData('auth_user', userData);
             localStorage.setItem('olivet_user_id', nickname);
             if (window.initAuthUI) window.initAuthUI();
+            if (window.initRealtimeSync) window.initRealtimeSync();
         } else {
             localStorage.removeItem('olivet_auth_user');
             if (window.initAuthUI) window.initAuthUI();
@@ -683,7 +743,6 @@
         { text: '"Your word is a lamp for my feet, a light on my path."', ref: '- Psalm 119:105' }
     ];
 
-    // 보안 강화된 HTML Escape 함수 (XSS 완전 방지)
     function escapeHtml(str) {
         if (str === null || str === undefined) return '';
         return String(str)
@@ -718,7 +777,6 @@
         }
     }
 
-    // 보안 강화: LocalStorage 변조 공격에 대비해 실제 Firebase 인증 사용자 객체로 2중 이메일 검증
     function isAdminUser() {
         let email = "";
         if (window.firebaseAuth && window.firebaseAuth.currentUser) {
@@ -1358,6 +1416,10 @@
                     Object.keys(importedObj).forEach(key => {
                         if (key.startsWith('olivet_') && typeof importedObj[key] === 'string') {
                             localStorage.setItem(key, importedObj[key]);
+                            const cleanKey = key.replace('olivet_', '');
+                            if (window.dbSaveData) {
+                                window.dbSaveData(cleanKey, JSON.parse(importedObj[key]));
+                            }
                         }
                     });
                     addLog('Restored data from backup file');
@@ -1380,6 +1442,10 @@
             keysToRemove.forEach(key => {
                 backupObj[key] = localStorage.getItem(key);
                 localStorage.removeItem(key);
+                const cleanKey = key.replace('olivet_', '');
+                if (window.dbSaveData) {
+                    window.dbSaveData(cleanKey, null);
+                }
             });
 
             localStorage.setItem('olivet_undo_backup', JSON.stringify(backupObj));
@@ -1400,7 +1466,13 @@
         if (confirm('Restore previous data before the last reset?')) {
             try {
                 const parsed = JSON.parse(undoData);
-                Object.keys(parsed).forEach(key => localStorage.setItem(key, parsed[key]));
+                Object.keys(parsed).forEach(key => {
+                    localStorage.setItem(key, parsed[key]);
+                    const cleanKey = key.replace('olivet_', '');
+                    if (window.dbSaveData) {
+                        window.dbSaveData(cleanKey, JSON.parse(parsed[key]));
+                    }
+                });
                 localStorage.removeItem('olivet_undo_backup');
                 addLog('Performed Undo Reset');
                 alert('Reset undone! Your data has been restored.');
@@ -1411,7 +1483,7 @@
         }
     }
 
-    // ================= TUTORIAL DATA & STATE =================
+    // TUTORIAL SETUP
     const tutorialSteps = [
         {
             target: 'header',
