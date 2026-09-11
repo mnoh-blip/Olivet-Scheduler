@@ -339,7 +339,9 @@
         <h3><i class="fa-solid fa-list-check"></i> Activity Log</h3>
         <span style="font-size: 0.8rem; opacity: 0.8;">Recent History</span>
     </div>
-    <div class="log-body" id="logContainer"></div>
+    <div class="log-body" id="logContainer">
+        <!-- Logs -->
+    </div>
     <div class="log-footer">
         <button class="btn btn-danger admin-only" style="font-size: 0.75rem;" onclick="clearLogs()">Clear Logs</button>
     </div>
@@ -540,7 +542,20 @@
 <!-- Firebase Modular SDK -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+    import {
+        getFirestore,
+        doc,
+        setDoc,
+        onSnapshot,
+        collection,
+        addDoc,
+        query,
+        orderBy,
+        limit,
+        getDocs,
+        writeBatch,
+        runTransaction
+    } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
     const firebaseConfig = {
@@ -558,28 +573,213 @@
     const auth = getAuth(app);
     window.firebaseAuth = auth;
 
+    /*
+     * FIRESTORE SYNC
+     *
+     * Normal scheduler data:
+     *   schedulerData/{key}
+     *
+     * Activity logs:
+     *   activityLogs/{auto-id}
+     *
+     * Logs are stored as separate documents instead of one shared array.
+     * This prevents simultaneous users from overwriting each other's logs.
+     */
     window.dbSaveData = async function(key, data) {
         try {
-            await setDoc(doc(db, "schedulerData", key), { value: data }, { merge: true });
+            const ref = doc(db, "schedulerData", key);
+
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(ref);
+
+                if (!snap.exists()) {
+                    transaction.set(ref, { value: data });
+                    return;
+                }
+
+                if (data === null) {
+                    transaction.set(ref, { value: null });
+                    return;
+                }
+
+                const serverValue = snap.data().value;
+                const merged = mergeRemoteData(serverValue, data);
+
+                transaction.set(ref, { value: merged });
+            });
         } catch (e) {
-            console.error("Firestore Save Error: ", e);
+            console.error("Firestore Save Error:", e);
         }
     };
 
-    window.dbListenData = function(key, callback) {
-        return onSnapshot(doc(db, "schedulerData", key), (docSnap) => {
-            if (docSnap.exists()) {
-                callback(docSnap.data().value);
-            } else {
-                callback(null);
+    /*
+     * Merge the latest Firestore value with the local edit.
+     * This is safer than blindly replacing the entire shared document.
+     * Same-field simultaneous edits are intentionally last-write-wins.
+     */
+    function mergeRemoteData(remote, local) {
+        if (Array.isArray(remote) && Array.isArray(local)) {
+            const result = remote.slice();
+
+            local.forEach((value, index) => {
+                if (
+                    value &&
+                    typeof value === 'object' &&
+                    !Array.isArray(value) &&
+                    result[index] &&
+                    typeof result[index] === 'object' &&
+                    !Array.isArray(result[index])
+                ) {
+                    result[index] = mergeRemoteData(result[index], value);
+                } else {
+                    result[index] = value;
+                }
+            });
+
+            if (local.length < result.length) {
+                result.length = local.length;
             }
-        });
+
+            return result;
+        }
+
+        if (
+            remote &&
+            typeof remote === 'object' &&
+            !Array.isArray(remote) &&
+            local &&
+            typeof local === 'object' &&
+            !Array.isArray(local)
+        ) {
+            const result = { ...remote };
+
+            Object.keys(local).forEach(key => {
+                if (
+                    local[key] &&
+                    typeof local[key] === 'object' &&
+                    !Array.isArray(local[key]) &&
+                    result[key] &&
+                    typeof result[key] === 'object' &&
+                    !Array.isArray(result[key])
+                ) {
+                    result[key] = mergeRemoteData(result[key], local[key]);
+                } else {
+                    result[key] = local[key];
+                }
+            });
+
+            return result;
+        }
+
+        return local;
+    }
+
+    window.dbListenData = function(key, callback) {
+        return onSnapshot(
+            doc(db, "schedulerData", key),
+            (docSnap) => {
+                if (docSnap.exists()) {
+                    callback(docSnap.data().value);
+                } else {
+                    callback(null);
+                }
+            },
+            (error) => {
+                console.error(`Firestore listener error for "${key}":`, error);
+            }
+        );
     };
 
+    /* =========================
+       SHARED ACTIVITY LOGS
+       ========================= */
+
+    let activityLogsUnsubscribe = null;
+
+    window.dbAddLog = async function(logEntry) {
+        try {
+            await addDoc(collection(db, "activityLogs"), {
+                user: logEntry.user || "Guest",
+                action: logEntry.action || "",
+                timestamp: logEntry.timestamp || new Date().toLocaleString('en-US', {
+                    dateStyle: 'short',
+                    timeStyle: 'short'
+                }),
+                createdAtMs: Date.now(),
+                uid: window.firebaseAuth?.currentUser?.uid || null
+            });
+        } catch (e) {
+            console.error("Firestore Activity Log Error:", e);
+        }
+    };
+
+    window.initActivityLogSync = function() {
+        if (activityLogsUnsubscribe) {
+            activityLogsUnsubscribe();
+        }
+
+        const logsQuery = query(
+            collection(db, "activityLogs"),
+            orderBy("createdAtMs", "desc"),
+            limit(100)
+        );
+
+        activityLogsUnsubscribe = onSnapshot(
+            logsQuery,
+            (snapshot) => {
+                const logs = snapshot.docs.map(d => ({
+                    id: d.id,
+                    ...d.data()
+                }));
+
+                localStorage.setItem(
+                    'olivet_activity_logs',
+                    JSON.stringify(logs)
+                );
+
+                if (window.renderLogs) {
+                    window.renderLogs();
+                }
+            },
+            (error) => {
+                console.error("Activity Log listener error:", error);
+
+                // Keep local logs visible if Firestore is temporarily unavailable.
+                if (window.renderLogs) {
+                    window.renderLogs();
+                }
+            }
+        );
+    };
+
+    window.dbClearLogs = async function() {
+        try {
+            const snapshot = await getDocs(collection(db, "activityLogs"));
+
+            if (snapshot.empty) return;
+
+            const batch = writeBatch(db);
+
+            snapshot.docs.forEach(logDoc => {
+                batch.delete(logDoc.ref);
+            });
+
+            await batch.commit();
+        } catch (e) {
+            console.error("Firestore Clear Logs Error:", e);
+            throw e;
+        }
+    };
+
+    // 실시간 동기화 설정 함수
     window.initRealtimeSync = function() {
         const syncKeys = [
-            'meals', 'meal_sticker_votes', 'cooking', 'cleaning',
-            'girlsDormData', 'boysDormData', 'activity_logs'
+            'meals',
+            'meal_sticker_votes',
+            'cooking',
+            'cleaning',
+            'girlsDormData',
+            'boysDormData'
         ];
 
         syncKeys.forEach(key => {
@@ -587,54 +787,105 @@
                 if (remoteVal !== null) {
                     const localVal = localStorage.getItem('olivet_' + key);
                     const remoteJson = JSON.stringify(remoteVal);
+
                     if (localVal !== remoteJson) {
-                        localStorage.setItem('olivet_' + key, remoteJson);
+                        localStorage.setItem(
+                            'olivet_' + key,
+                            remoteJson
+                        );
+
                         refreshUIByKey(key);
                     }
                 }
             });
         });
 
+        // Activity logs are synchronized through their own collection.
+        window.initActivityLogSync();
+
+        // 학년별 시간표 & 메모 리스너 등록
         [6, 7, 8, 9, 10, 11, 12].forEach(g => {
             const schedKey = `schedule_g${g}`;
+
             window.dbListenData(schedKey, (remoteVal) => {
                 if (remoteVal !== null) {
                     const localVal = localStorage.getItem('olivet_' + schedKey);
                     const remoteJson = JSON.stringify(remoteVal);
+
                     if (localVal !== remoteJson) {
-                        localStorage.setItem('olivet_' + schedKey, remoteJson);
-                        const curGrade = document.getElementById('gradeSelect')?.value;
-                        if (String(curGrade) === String(g) && !document.activeElement.classList.contains('auto-expand')) {
+                        localStorage.setItem(
+                            'olivet_' + schedKey,
+                            remoteJson
+                        );
+
+                        const curGrade =
+                            document.getElementById('gradeSelect')?.value;
+
+                        const active = document.activeElement;
+
+                        if (
+                            String(curGrade) === String(g) &&
+                            !(active && active.classList.contains('auto-expand'))
+                        ) {
                             window.loadScheduleAndSideNotes();
                         }
                     }
                 }
             });
 
-            ['sideBring', 'sideAnnounce', 'sideTodo', 'sideTodoGreen'].forEach(sideId => {
-                const sideKey = `side_${sideId}_g${g}`;
-                window.dbListenData(sideKey, (remoteVal) => {
-                    if (remoteVal !== null) {
-                        const localVal = localStorage.getItem('olivet_' + sideKey);
-                        if (localVal !== JSON.stringify(remoteVal)) {
-                            localStorage.setItem('olivet_' + sideKey, JSON.stringify(remoteVal));
-                            const curGrade = document.getElementById('gradeSelect')?.value;
-                            if (String(curGrade) === String(g)) {
-                                const elem = document.getElementById(sideId);
-                                if (elem && document.activeElement !== elem) {
-                                    elem.value = remoteVal;
-                                    if (window.autoResizeTextarea) window.autoResizeTextarea(elem, 80);
+            ['sideBring', 'sideAnnounce', 'sideTodo', 'sideTodoGreen']
+                .forEach(sideId => {
+                    const sideKey = `side_${sideId}_g${g}`;
+
+                    window.dbListenData(sideKey, (remoteVal) => {
+                        if (remoteVal !== null) {
+                            const localVal =
+                                localStorage.getItem('olivet_' + sideKey);
+
+                            if (
+                                localVal !== JSON.stringify(remoteVal)
+                            ) {
+                                localStorage.setItem(
+                                    'olivet_' + sideKey,
+                                    JSON.stringify(remoteVal)
+                                );
+
+                                const curGrade =
+                                    document.getElementById('gradeSelect')?.value;
+
+                                if (String(curGrade) === String(g)) {
+                                    const elem =
+                                        document.getElementById(sideId);
+
+                                    if (
+                                        elem &&
+                                        document.activeElement !== elem
+                                    ) {
+                                        elem.value = remoteVal;
+
+                                        if (window.autoResizeTextarea) {
+                                            window.autoResizeTextarea(
+                                                elem,
+                                                80
+                                            );
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
+                    });
                 });
-            });
         });
     };
 
     function refreshUIByKey(key) {
-        if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+        // Never redraw a textarea while the user is typing.
+        if (
+            document.activeElement &&
+            document.activeElement.tagName === 'TEXTAREA'
+        ) {
+            return;
+        }
 
         if (key === 'meals' || key === 'meal_sticker_votes') {
             if (window.initMeals) window.initMeals();
@@ -642,10 +893,11 @@
             if (window.initCooking) window.initCooking();
         } else if (key === 'cleaning') {
             if (window.initCleaning) window.initCleaning();
-        } else if (key === 'girlsDormData' || key === 'boysDormData') {
+        } else if (
+            key === 'girlsDormData' ||
+            key === 'boysDormData'
+        ) {
             if (window.initDormTables) window.initDormTables();
-        } else if (key === 'activity_logs') {
-            if (window.renderLogs) window.renderLogs();
         }
     }
 
@@ -811,22 +1063,49 @@
     }
 
     function addLog(actionDescription) {
-        const currentUser = getData('auth_user', { nickname: 'Guest' });
-        const displayUser = currentUser.nickname || 'Guest';
-        const logs = getData('activity_logs', []);
-        const now = new Date().toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
+        const currentUser =
+            getData('auth_user', { nickname: 'Guest' });
+
+        const displayUser =
+            currentUser?.nickname || 'Guest';
 
         const logEntry = {
             user: displayUser,
             action: actionDescription,
-            timestamp: now
+            timestamp: new Date().toLocaleString('en-US', {
+                dateStyle: 'short',
+                timeStyle: 'short'
+            }),
+            createdAtMs: Date.now()
         };
 
-        logs.unshift(logEntry); 
-        if (logs.length > 50) logs.pop(); 
+        /*
+         * Optimistic local display.
+         * Firestore is the shared source of truth.
+         */
+        const logs = getData('activity_logs', []);
 
-        saveData('activity_logs', logs);
+        logs.unshift(logEntry);
+
+        if (logs.length > 100) {
+            logs.length = 100;
+        }
+
+        localStorage.setItem(
+            'olivet_activity_logs',
+            JSON.stringify(logs)
+        );
+
         renderLogs();
+
+        /*
+         * IMPORTANT:
+         * Do NOT save the whole activity_logs array to Firestore here.
+         * Each log is now an individual Firestore document.
+         */
+        if (window.dbAddLog) {
+            window.dbAddLog(logEntry);
+        }
     }
 
     function renderLogs() {
@@ -859,11 +1138,30 @@
         }
     }
 
-    function clearLogs() {
+    async function clearLogs() {
         if (!isAdminUser()) return;
-        if (confirm('Are you sure you want to clear all activity logs?')) {
-            saveData('activity_logs', []);
-            renderLogs();
+
+        if (
+            confirm(
+                'Are you sure you want to clear all activity logs?'
+            )
+        ) {
+            try {
+                if (window.dbClearLogs) {
+                    await window.dbClearLogs();
+                }
+
+                localStorage.setItem(
+                    'olivet_activity_logs',
+                    '[]'
+                );
+
+                renderLogs();
+            } catch (e) {
+                alert(
+                    'Failed to clear activity logs. Please try again.'
+                );
+            }
         }
     }
 
@@ -1676,42 +1974,6 @@
         document.getElementById('tutorialOverlay').style.display = 'none';
         saveData('tutorial_completed', true);
     }
-
-    // 글로벌 바인딩
-    window.getData = getData;
-    window.saveData = saveData;
-    window.initMeals = initMeals;
-    window.initCooking = initCooking;
-    window.initCleaning = initCleaning;
-    window.initDormTables = initDormTables;
-    window.loadScheduleAndSideNotes = loadScheduleAndSideNotes;
-    window.renderLogs = renderLogs;
-    window.addLog = addLog;
-    window.initAuthUI = initAuthUI;
-    window.autoResizeTextarea = autoResizeTextarea;
-    window.debouncedSaveMeal = debouncedSaveMeal;
-    window.voteSticker = voteSticker;
-    window.debouncedSaveCooking = debouncedSaveCooking;
-    window.debouncedSaveCleaning = debouncedSaveCleaning;
-    window.debouncedSaveDormRow = debouncedSaveDormRow;
-    window.addDormRow = addDormRow;
-    window.deleteDormRow = deleteDormRow;
-    window.handleSwapClick = handleSwapClick;
-    window.debouncedSaveScheduleItem = debouncedSaveScheduleItem;
-    window.addScheduleRow = addScheduleRow;
-    window.deleteScheduleItem = deleteScheduleItem;
-    window.debouncedSaveSideContent = debouncedSaveSideContent;
-    window.changeMonth = changeMonth;
-    window.debouncedSaveCalendarEvent = debouncedSaveCalendarEvent;
-    window.toggleDarkMode = toggleDarkMode;
-    window.toggleLogPanel = toggleLogPanel;
-    window.clearLogs = clearLogs;
-    window.startTutorial = startTutorial;
-    window.exportData = exportData;
-    window.importData = importData;
-    window.resetAllData = resetAllData;
-    window.undoResetData = undoResetData;
-    window.handleSkipClick = handleSkipClick;
 
     window.addEventListener('DOMContentLoaded', () => {
         initTheme();
