@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Olivet Scheduler</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Google Identity Services SDK -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        :root {
+            --primary-red: #c0392b;
+            --dark-red: #962d22;
+            --light-red: #fadbd8;
+            --bg-white: #ffffff;
+            --off-white: #f7f7f7;
+            --border-color: #e0e0e0;
+            --text-color: #2c3e50;
+            --card-bg: #ffffff;
+            
+            --note-yellow: #fff9c4;
+            --note-yellow-border: #fbc02d;
+            --note-blue: #e1f5fe;
+            --note-blue-border: #03a9f4;
+            --note-pink: #fce4ec;
+            --note-pink-border: #f06292;
+            --note-green: #e8f5e9;
+            --note-green-border: #66bb6a;
+            
+            --girls-pink: #e91e63;
+            --girls-pink-bg: #fce4ec;
+        }
+
+        body.dark-mode {
+            --bg-white: #1e1e1e;
+            --off-white: #121212;
+            --border-color: #333333;
+            --text-color: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --light-red: #4a1510;
+            --primary-red: #e74c3c;
+            --dark-red: #ff6b6b;
+            
+            --note-yellow: #333018;
+            --note-blue: #152935;
+            --note-pink: #351822;
+            --note-green: #18301b;
+            --girls-pink-bg: #3d1424;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--off-white); color: var(--text-color); padding: 20px; transition: background-color 0.3s, color 0.3s; overflow-x: hidden; }
+        header { background-color: var(--primary-red); color: white; text-align: center; padding: 25px 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; gap: 15px; position: relative; }
+        header h1 { font-size: 2.2rem; letter-spacing: 1px; display: flex; align-items: center; gap: 12px; }
+
+        .header-controls { position: absolute; right: 20px; display: flex; align-items: center; gap: 10px; }
+
+        .theme-toggle-btn, .login-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
+        .theme-toggle-btn:hover, .login-btn:hover { background: rgba(255,255,255,0.35); }
+
+        .user-profile-badge { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.3); }
+
+        .bible-banner { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 5px solid #f39c12; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .bible-banner i { color: #f39c12; font-size: 1.4rem; }
+        .bible-text { font-style: italic; font-size: 0.95rem; }
+        .bible-ref { font-weight: bold; font-style: normal; margin-left: 8px; color: var(--dark-red); }
+
+        .quick-nav { display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px; background: var(--card-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .nav-row { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .nav-row-divider { height: 1px; background-color: var(--border-color); margin: 2px 0; }
+        .nav-item { display: flex; align-items: center; gap: 8px; background-color: var(--light-red); border: 1px solid var(--light-red); color: var(--dark-red); padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold; font-size: 0.9rem; transition: all 0.2s ease; cursor: pointer; }
+        .nav-item i { font-size: 1rem; }
+        .nav-item:hover { background-color: var(--primary-red); color: white; transform: translateY(-2px); }
+        .nav-row-actions .nav-item { padding: 5px 12px; font-size: 0.8rem; gap: 6px; font-weight: 600; }
+        .nav-row-actions .nav-item i { font-size: 0.85rem; }
+        .nav-item.nav-action { background-color: #e8f8f5; border-color: #a3e4d7; color: #16a085; }
+        body.dark-mode .nav-item.nav-action { background-color: #113831; border-color: #16a085; color: #a3e4d7; }
+        .nav-item.nav-action:hover { background-color: #16a085; color: white; }
+        .nav-item.nav-danger, .nav-item.nav-undo { background-color: #fadbd8; border-color: #f5b7b1; color: #c0392b; }
+        body.dark-mode .nav-item.nav-danger, body.dark-mode .nav-item.nav-undo { background-color: #4a1510; border-color: #962d22; color: #ff6b6b; }
+        .nav-item.nav-danger:hover, .nav-item.nav-undo:hover { background-color: #c0392b; color: white; }
+
+        .container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-top: 5px solid var(--primary-red); border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .card h2 { color: var(--primary-red); margin-bottom: 15px; font-size: 1.5rem; border-bottom: 2px solid var(--light-red); padding-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+        .grid-7 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+        .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+
+        label { font-size: 0.8rem; font-weight: bold; color: var(--dark-red); display: block; margin-top: 6px; }
+        select { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.9rem; margin-top: 2px; background: var(--bg-white); color: var(--text-color); }
+
+        .auto-expand { width: 100%; min-height: 42px; resize: none; overflow: hidden; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.88rem; line-height: 1.4; padding: 6px 8px; margin-top: 2px; background: transparent; color: var(--text-color); box-sizing: border-box; transition: border-color 0.2s, background-color 0.2s; display: block; }
+        .auto-expand:focus { outline: none; border-color: var(--primary-red); background-color: rgba(192, 57, 43, 0.05); }
+
+        .sticky-note { position: relative; padding: 15px 12px 12px 12px; border-radius: 2px 2px 12px 2px; box-shadow: 2px 4px 10px rgba(0,0,0,0.12), 0 0 2px rgba(0,0,0,0.08); transition: transform 0.2s ease, box-shadow 0.2s ease; margin-bottom: 10px; }
+        .sticky-note:hover { transform: translateY(-2px) rotate(-0.5deg); box-shadow: 4px 8px 15px rgba(0,0,0,0.15); }
+        .sticky-note::before { content: ''; position: absolute; top: -6px; left: 50%; transform: translateX(-50%); width: 12px; height: 12px; background: rgba(192, 57, 43, 0.8); border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .sticky-note h3, .sticky-note h4 { font-size: 1rem; font-weight: bold; text-align: center; margin-bottom: 8px; padding-bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .sticky-yellow { background-color: var(--note-yellow); border-left: 4px solid var(--note-yellow-border); }
+        .sticky-yellow h3, .sticky-yellow h4 { color: #f57f17; border-bottom: 1px solid rgba(245, 127, 23, 0.3); }
+        .sticky-blue { background-color: var(--note-blue); border-left: 4px solid var(--note-blue-border); }
+        .sticky-blue h3, .sticky-blue h4 { color: #0277bd; border-bottom: 1px solid rgba(2, 119, 189, 0.3); }
+        .sticky-pink { background-color: var(--note-pink); border-left: 4px solid var(--note-pink-border); }
+        .sticky-pink h3, .sticky-pink h4 { color: #c2185b; border-bottom: 1px solid rgba(194, 24, 91, 0.3); }
+        .sticky-green { background-color: var(--note-green); border-left: 4px solid var(--note-green-border); }
+        .sticky-green h3, .sticky-green h4 { color: #2e7d32; border-bottom: 1px solid rgba(46, 125, 50, 0.3); }
+        .sticky-note textarea.auto-expand { border: none; border-radius: 0; padding: 4px 2px; font-size: 0.9rem; }
+
+        .meal-table-wrapper { overflow-x: auto; }
+        .meal-table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        .meal-table th, .meal-table td { border: 1px solid var(--border-color); padding: 0; vertical-align: top; position: relative; }
+        .meal-table th { background-color: var(--light-red); color: var(--dark-red); text-align: center; font-size: 0.95rem; padding: 8px 6px; }
+        .meal-table td.meal-type-header { background-color: var(--light-red); color: var(--primary-red); font-weight: bold; text-align: center; vertical-align: middle; width: 100px; padding: 6px; }
+        .meal-cell-container { display: flex; flex-direction: column; height: 100%; justify-content: space-between; }
+
+        .sticker-bar { display: flex; justify-content: space-around; align-items: center; padding: 3px; background: rgba(0,0,0,0.03); border-top: 1px dashed var(--border-color); }
+        body.dark-mode .sticker-bar { background: rgba(255,255,255,0.03); }
+        .sticker-btn { background: transparent; border: 1px solid transparent; cursor: pointer; padding: 2px 4px; font-size: 0.78rem; display: flex; align-items: center; gap: 2px; border-radius: 10px; transition: all 0.15s ease; user-select: none; }
+        .sticker-btn:hover { background: rgba(0,0,0,0.08); transform: scale(1.1); }
+        body.dark-mode .sticker-btn:hover { background: rgba(255,255,255,0.12); }
+        .sticker-btn.selected { background: var(--light-red); border-color: var(--primary-red); font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        body.dark-mode .sticker-btn.selected { background: var(--light-red); border-color: var(--primary-red); color: #ffffff; }
+        .sticker-btn .emoji { font-size: 0.95rem; }
+
+        .btn { background-color: var(--primary-red); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .btn:hover { background-color: var(--dark-red); }
+
+        .btn-swap { background-color: var(--primary-red); color: white; border: 1px solid transparent; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-swap:hover { background-color: var(--dark-red); }
+        .btn-swap.selected { background-color: #e74c3c; color: #ffffff; box-shadow: 0 0 10px rgba(192, 57, 43, 0.8); border: 1px solid #962d22; transform: scale(1.15); }
+
+        .btn-danger { background-color: #e74c3c; padding: 2px 6px; font-size: 0.8rem; }
+        .btn-danger:hover { background-color: #c0392b; }
+
+        .table-custom { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .table-custom th, .table-custom td { border: 1px solid var(--border-color); padding: 0; text-align: left; vertical-align: middle; }
+        .table-custom th { background-color: var(--light-red); color: var(--dark-red); padding: 8px 6px; }
+        .table-custom textarea.auto-expand, .meal-table textarea.auto-expand { border: none; border-radius: 0; background: transparent; margin: 0; padding: 8px; width: 100%; min-height: 42px; box-shadow: none; display: block; }
+
+        textarea.auto-expand.tag-math { background-color: rgba(231, 76, 60, 0.25) !important; }
+        textarea.auto-expand.tag-science { background-color: rgba(230, 126, 34, 0.25) !important; }
+        textarea.auto-expand.tag-english { background-color: rgba(241, 196, 15, 0.3) !important; }
+        textarea.auto-expand.tag-history { background-color: rgba(46, 204, 113, 0.25) !important; }
+        textarea.auto-expand.tag-pe { background-color: rgba(52, 152, 219, 0.25) !important; }
+        textarea.auto-expand.tag-art { background-color: rgba(63, 81, 181, 0.25) !important; }
+        textarea.auto-expand.tag-chapel { background-color: rgba(155, 89, 182, 0.25) !important; }
+        textarea.auto-expand.tag-elective { background-color: rgba(149, 165, 166, 0.3) !important; }
+
+        .girls-header { color: var(--girls-pink) !important; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        #girlsDormTable th { background-color: var(--girls-pink-bg); color: var(--dark-red); }
+
+        .grade-selector { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .grade-selector select { width: 150px; }
+
+        .schedule-container { display: flex; gap: 20px; flex-wrap: wrap; }
+        .schedule-main { flex: 2; min-width: 320px; }
+        .schedule-side { flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 15px; }
+
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+        .calendar-day-head { font-weight: bold; background: var(--light-red); color: var(--dark-red); padding: 5px 0; }
+        .calendar-day { border: 1px solid var(--border-color); min-height: 80px; padding: 5px; text-align: left; background: var(--card-bg); vertical-align: top; }
+        .calendar-day .date-num { font-weight: bold; font-size: 0.8rem; color: var(--primary-red); margin-bottom: 4px; }
+
+        /* Activity Log Side Panel Styles */
+        .log-panel {
+            position: fixed; top: 0; right: -360px; width: 350px; height: 100vh;
+            background: var(--card-bg); border-left: 2px solid var(--primary-red);
+            box-shadow: -5px 0 20px rgba(0,0,0,0.2); z-index: 9999;
+            transition: right 0.3s ease-in-out; display: flex; flex-direction: column;
+        }
+        .log-panel.open { right: 0; }
+        .log-toggle-btn {
+            position: absolute; top: 50%; left: -36px; transform: translateY(-50%);
+            width: 36px; height: 50px; background: var(--primary-red); color: white;
+            border: none; border-radius: 8px 0 0 8px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; box-shadow: -3px 0 8px rgba(0,0,0,0.15);
+        }
+        .log-header {
+            padding: 18px; background: var(--primary-red); color: white;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .log-header h3 { font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+        .log-body {
+            flex: 1; padding: 15px; overflow-y: auto; display: flex;
+            flex-direction: column; gap: 10px; font-size: 0.85rem;
+        }
+        .log-item {
+            background: var(--off-white); border: 1px solid var(--border-color);
+            border-left: 4px solid var(--primary-red); border-radius: 4px;
+            padding: 8px 10px; line-height: 1.4;
+        }
+        .log-item .log-user { font-weight: bold; color: var(--primary-red); }
+        .log-item .log-time { font-size: 0.72rem; opacity: 0.6; margin-top: 4px; display: block; }
+        .log-footer { padding: 10px 15px; border-top: 1px solid var(--border-color); text-align: right; }
+
+        /* Tutorial Styles */
+        .tutorial-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; display: none; pointer-events: auto; }
+        .tutorial-spotlight { position: fixed; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7); border-radius: 8px; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); pointer-events: none; z-index: 1000000; }
+        .tutorial-popover { position: fixed; background: var(--card-bg, #ffffff); color: var(--text-color, #333333); padding: 18px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); width: 340px; z-index: 1000001; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); border: 2px solid var(--primary-red, #c0392b); }
+        .tutorial-popover h4 { margin-bottom: 8px; color: var(--primary-red, #c0392b); font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+        .tutorial-popover p { font-size: 0.88rem; line-height: 1.5; margin-bottom: 16px; }
+        .tutorial-input-group { display: flex; gap: 6px; margin-top: 10px; margin-bottom: 12px; }
+        .tutorial-input { flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; background: var(--bg-white); color: var(--text-color); }
+        .tutorial-input:focus { outline: none; border-color: var(--primary-red); }
+        .tutorial-controls { display: flex; justify-content: space-between; align-items: center; }
+        .tutorial-steps-count { font-size: 0.8rem; font-weight: bold; opacity: 0.7; }
+        .tutorial-btns { display: flex; gap: 8px; }
+        .tutorial-btn { padding: 6px 14px; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .tutorial-btn-next { background-color: var(--primary-red, #c0392b); color: white; }
+        .tutorial-btn-next:hover { background-color: var(--dark-red, #962d22); }
+        .tutorial-btn-skip { background-color: transparent; color: var(--text-color); border: 1px solid var(--border-color); }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1><i class="fa-solid fa-calendar-check" style="font-size: 1.8rem;"></i> Olivet Scheduler</h1>
+    <div class="header-controls">
+        <div id="userBadge" class="user-profile-badge" style="display: none;">
+            <i class="fa-solid fa-circle-user"></i>
+            <span id="userNicknameSpan">Guest</span>
+        </div>
+        <button class="login-btn" id="loginBtn" onclick="handleGoogleLogin()">
+            <i class="fa-solid fa-right-to-bracket" id="loginIcon"></i> <span id="loginBtnText">Login</span>
+        </button>
+        <button class="theme-toggle-btn" onclick="toggleDarkMode()">
+            <i class="fa-solid fa-moon" id="themeIcon"></i> <span id="themeText">Dark Mode</span>
+        </button>
+    </div>
+</header>
+
+<!-- Activity Log Side Panel -->
+<div id="logPanel" class="log-panel">
+    <button class="log-toggle-btn" id="logToggleBtn" onclick="toggleLogPanel()">
+        <i class="fa-solid fa-chevron-left" id="logToggleIcon"></i>
+    </button>
+    <div class="log-header">
+        <h3><i class="fa-solid fa-list-check"></i> Activity Log</h3>
+        <span style="font-size: 0.8rem; opacity: 0.8;">Recent History</span>
+    </div>
+    <div class="log-body" id="logContainer">
+        <!-- Log items dynamically inserted here -->
+    </div>
+    <div class="log-footer">
+        <button class="btn btn-danger" style="font-size: 0.75rem;" onclick="clearLogs()">Clear Logs</button>
+    </div>
+</div>
+
+<div class="bible-banner">
+    <i class="fa-solid fa-book-bible"></i>
+    <div>
+        <span class="bible-text" id="bibleVerse">"I can do all this through him who gives me strength."</span>
+        <span class="bible-ref" id="bibleRef">- Philippians 4:13</span>
+    </div>
+</div>
+
+<nav class="quick-nav">
+    <div class="nav-row">
+        <a href="#sec-meals" class="nav-item"><i class="fa-solid fa-utensils"></i> Weekly Meals</a>
+        <a href="#sec-cooking" class="nav-item"><i class="fa-solid fa-fire-burner"></i> Weekend Cooking</a>
+        <a href="#sec-cafeteria-cleaning" class="nav-item"><i class="fa-solid fa-soap"></i> Cafeteria Cleaning</a>
+        <a href="#sec-dorm-cleaning" class="nav-item"><i class="fa-solid fa-broom"></i> Dorm Cleaning</a>
+        <a href="#sec-schedule" class="nav-item"><i class="fa-solid fa-pencil"></i> Class Schedule</a>
+        <a href="#sec-calendar" class="nav-item"><i class="fa-solid fa-calendar-days"></i> School Calendar</a>
+    </div>
+
+    <div class="nav-row-divider"></div>
+
+    <div class="nav-row nav-row-actions">
+        <span class="nav-item nav-danger" onclick="startTutorial()"><i class="fa-solid fa-circle-question"></i> Tutorial</span>
+        <span class="nav-item nav-danger" onclick="resetAllData()"><i class="fa-solid fa-trash"></i> Reset All</span>
+        <span class="nav-item nav-undo" onclick="undoResetData()"><i class="fa-solid fa-rotate-left"></i> Undo Reset</span>
+        <span class="nav-item nav-action" onclick="exportData()"><i class="fa-solid fa-download"></i> Backup Data</span>
+        <span class="nav-item nav-action" onclick="document.getElementById('importFileInput').click()"><i class="fa-solid fa-upload"></i> Restore Data</span>
+        <span class="nav-item nav-action" onclick="window.print()"><i class="fa-solid fa-print"></i> Print</span>
+    </div>
+
+    <input type="file" id="importFileInput" style="display: none;" accept=".json" onchange="importData(event)">
+</nav>
+
+<div class="container">
+
+    <div class="card" id="sec-meals">
+        <h2><i class="fa-solid fa-utensils"></i> Weekly Meal Menu & Sticker Ratings</h2>
+        <div class="meal-table-wrapper">
+            <table class="meal-table">
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Meal</th>
+                        <th>Mon</th>
+                        <th>Tue</th>
+                        <th>Wed</th>
+                        <th>Thu</th>
+                        <th>Fri</th>
+                        <th>Sat</th>
+                        <th>Sun</th>
+                    </tr>
+                </thead>
+                <tbody id="mealTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card" id="sec-cooking">
+        <h2><i class="fa-solid fa-fire-burner"></i> Weekend Cooking Team (Sat - Sun)</h2>
+        <div class="grid-2" id="cookingGrid"></div>
+    </div>
+
+    <div class="card" id="sec-cafeteria-cleaning">
+        <h2><i class="fa-solid fa-soap"></i> Cafeteria Cleaning Team (Mon - Sun)</h2>
+        <div class="grid-7" id="cleaningGrid"></div>
+    </div>
+
+    <div class="card" id="sec-dorm-cleaning">
+        <h2><i class="fa-solid fa-broom"></i> Saturday Dorm Cleaning Team</h2>
+        <div class="grid-2">
+            <div>
+                <h3 class="girls-header"><i class="fa-solid fa-person-dress"></i> Girls' Dormitory</h3>
+                <table class="table-custom" id="girlsDormTable">
+                    <thead>
+                        <tr>
+                            <th>Cleaning Area</th>
+                            <th>Assigned Student</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <button class="btn" style="margin-top: 10px;" onclick="addDormRow('girlsDormTable')">+ Add Row</button>
+            </div>
+            <div>
+                <h3><i class="fa-solid fa-person"></i> Boys' Dormitory</h3>
+                <table class="table-custom" id="boysDormTable">
+                    <thead>
+                        <tr>
+                            <th>Cleaning Area</th>
+                            <th>Assigned Student</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <button class="btn" onclick="addDormRow('boysDormTable')" style="margin-top: 10px;">+ Add Row</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="sec-schedule">
+        <h2><i class="fa-solid fa-pen-ruler"></i> Grade Class Schedule & Sticky Notes</h2>
+        <div class="grade-selector">
+            <label for="gradeSelect" style="margin:0;">Select Grade:</label>
+            <select id="gradeSelect" onchange="loadScheduleAndSideNotes()">
+                <option value="6">Grade 6</option>
+                <option value="7">Grade 7</option>
+                <option value="8">Grade 8</option>
+                <option value="9">Grade 9</option>
+                <option value="10">Grade 10</option>
+                <option value="11">Grade 11</option>
+                <option value="12">Grade 12</option>
+            </select>
+        </div>
+
+        <div class="schedule-container">
+            <div class="schedule-main">
+                <table class="table-custom" id="scheduleTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">Swap</th>
+                            <th style="width: 25%;">Time</th>
+                            <th>Period / Activity</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <button class="btn" onclick="addScheduleRow()" style="margin-top: 10px;">+ Add Period/Slot</button>
+            </div>
+
+            <div class="schedule-side">
+                <div class="sticky-note sticky-yellow">
+                    <h3><i class="fa-solid fa-pen-clip"></i> Items to Bring Tomorrow</h3>
+                    <textarea id="sideBring" class="auto-expand" placeholder="Type items to bring..." oninput="autoResizeTextarea(this); debouncedSaveSideContent('sideBring')"></textarea>
+                </div>
+
+                <div class="sticky-note sticky-blue">
+                    <h3><i class="fa-solid fa-thumbtack"></i> Announcements</h3>
+                    <textarea id="sideAnnounce" class="auto-expand" placeholder="Type announcements here..." oninput="autoResizeTextarea(this); debouncedSaveSideContent('sideAnnounce')"></textarea>
+                </div>
+
+                <div class="sticky-note sticky-pink">
+                    <h3><i class="fa-solid fa-hourglass-half"></i> Upcoming Deadlines</h3>
+                    <textarea id="sideTodo" class="auto-expand" placeholder="Type deadlines or notes..." oninput="autoResizeTextarea(this); debouncedSaveSideContent('sideTodo')"></textarea>
+                </div>
+
+                <div class="sticky-note sticky-green">
+                    <h3><i class="fa-solid fa-book-open-reader"></i> To Do List</h3>
+                    <textarea id="sideTodoGreen" class="auto-expand" placeholder="Type your task list here..." oninput="autoResizeTextarea(this); debouncedSaveSideContent('sideTodoGreen')"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="sec-calendar">
+        <h2><i class="fa-solid fa-calendar-days"></i> School Calendar</h2>
+        <div class="calendar-header">
+            <button class="btn" onclick="changeMonth(-1)">&lt; Prev</button>
+            <h3 id="calendarMonthYear" style="color: var(--primary-red);"></h3>
+            <button class="btn" onclick="changeMonth(1)">Next &gt;</button>
+        </div>
+        <div class="calendar-grid">
+            <div class="calendar-day-head">Sun</div>
+            <div class="calendar-day-head">Mon</div>
+            <div class="calendar-day-head">Tue</div>
+            <div class="calendar-day-head">Wed</div>
+            <div class="calendar-day-head">Thu</div>
+            <div class="calendar-day-head">Fri</div>
+            <div class="calendar-day-head">Sat</div>
+        </div>
+        <div class="calendar-grid" id="calendarDays"></div>
+    </div>
+
+</div>
+
+<div id="tutorialOverlay" class="tutorial-overlay">
+    <div id="tutorialSpotlight" class="tutorial-spotlight"></div>
+    <div id="tutorialPopover" class="tutorial-popover">
+        <h4 id="tutTitle"><i class="fa-solid fa-lightbulb"></i> Title</h4>
+        <p id="tutText">Description</p>
+        <div id="tutInputArea"></div>
+        <div class="tutorial-controls">
+            <span class="tutorial-steps-count" id="tutStepCount">1 / 9</span>
+            <div class="tutorial-btns">
+                <button class="tutorial-btn tutorial-btn-skip" id="tutSkipBtn" onclick="handleSkipClick()">Skip</button>
+                <button class="tutorial-btn tutorial-btn-next" id="tutNextBtn" onclick="nextTutorialStep()">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Firebase Modular SDK -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+
+    // Firebase Configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyDdaoNHitc3Z3vSrhyv0gmtfMsEACk4vGc",
+        authDomain: "olivet-scheduler.firebaseapp.com",
+        projectId: "olivet-scheduler",
+        storageBucket: "olivet-scheduler.firebasestorage.app",
+        messagingSenderId: "377014643728",
+        appId: "1:377014643728:web:d2a920ea5d9c433e20ae95",
+        measurementId: "G-QEN7Y7E844"
+    };
+
+    // Initialize Firebase, Firestore, and Auth
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Global Firebase Helper Functions
+    window.dbSaveData = async function(key, data) {
+        try {
+            await setDoc(doc(db, "schedulerData", key), { value: data }, { merge: true });
+        } catch (e) {
+            console.error("Firestore Save Error: ", e);
+        }
+    };
+
+    window.dbListenData = function(key, callback) {
+        return onSnapshot(doc(db, "schedulerData", key), (docSnap) => {
+            if (docSnap.exists()) {
+                callback(docSnap.data().value);
+            } else {
+                callback(null);
+            }
+        });
+    };
+
+    // Real Google Popup Authentication with @olivetacademy.org Domain Lock
+    window.handleGoogleLogin = async function() {
+        const currentUser = window.getData ? window.getData('auth_user', null) : null;
+        if (currentUser && currentUser.nickname) {
+            if (confirm('Are you sure you want to logout?')) {
+                try {
+                    await signOut(auth);
+                    if (window.addLog) window.addLog('Logged out');
+                    localStorage.removeItem('olivet_auth_user');
+                    localStorage.removeItem('olivet_user_id');
+                    window.initAuthUI();
+                } catch (err) {
+                    console.error("Sign-out error:", err);
+                }
+            }
+            return;
+        }
+
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({
+            hd: "olivetacademy.org",
+            prompt: "select_account"
+        });
+
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+            const email = user.email || '';
+
+            if (!email.toLowerCase().endsWith('@olivetacademy.org')) {
+                await signOut(auth);
+                alert('Access Restricted: Only @olivetacademy.org Google accounts are allowed to log in.');
+                return;
+            }
+
+            const nickname = email.split('@')[0];
+            const userData = { email: email, nickname: nickname, photoURL: user.photoURL || '' };
+            
+            if (window.saveData) {
+                window.saveData('auth_user', userData);
+            }
+            localStorage.setItem('olivet_user_id', nickname);
+
+            if (window.initAuthUI) window.initAuthUI();
+            if (window.addLog) window.addLog('Logged in via Google as ' + nickname);
+
+        } catch (error) {
+            console.error("Google Sign-In Error:", error);
+            if (error.code !== 'auth/popup-closed-by-user') {
+                alert('Login failed: ' + error.message);
+            }
+        }
+    };
+
+    // Auth State Change Listener
+    onAuthStateChanged(auth, (user) => {
+        if (user && user.email && user.email.toLowerCase().endsWith('@olivetacademy.org')) {
+            const nickname = user.email.split('@')[0];
+            const userData = { email: user.email, nickname: nickname, photoURL: user.photoURL || '' };
+            if (window.saveData) window.saveData('auth_user', userData);
+            localStorage.setItem('olivet_user_id', nickname);
+            if (window.initAuthUI) window.initAuthUI();
+        } else if (user) {
+            signOut(auth);
+        }
+    });
+</script>
+
+<script>
+    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const weekendDays = ['Saturday', 'Sunday'];
+    const mealTypes = [
+        { key: 'b', name: 'Breakfast' },
+        { key: 'l', name: 'Lunch' },
+        { key: 'd', name: 'Dinner' }
+    ];
+
+    const stickerTypes = [
+        { key: 'delicious', emoji: '😋', label: 'Delicious' },
+        { key: 'average', emoji: '😐', label: 'Average' },
+        { key: 'bad', emoji: '😭', label: 'Poor' }
+    ];
+
+    const bibleVerses = [
+        { text: '"I can do all this through him who gives me strength."', ref: '- Philippians 4:13' },
+        { text: '"Trust in the LORD with all your heart and lean not on your own understanding."', ref: '- Proverbs 3:5' },
+        { text: '"For I know the plans I have for you," declares the LORD, "plans to prosper you and not to harm you, plans to give you hope and a future."', ref: '- Jeremiah 29:11' },
+        { text: '"Be strong and courageous. Do not be afraid; do not be discouraged, for the LORD your God will be with you wherever you go."', ref: '- Joshua 1:9' },
+        { text: '"The LORD is my shepherd, I lack nothing."', ref: '- Psalm 23:1' },
+        { text: '"And we know that in all things God works for the good of those who love him."', ref: '- Romans 8:28' },
+        { text: '"Your word is a lamp for my feet, a light on my path."', ref: '- Psalm 119:105' }
+    ];
+
+    function escapeHtml(str) {
+        if (typeof str !== 'string') return '';
+        return str
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function debounce(func, wait = 300) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    function saveData(key, data) {
+        localStorage.setItem('olivet_' + key, JSON.stringify(data));
+        if (window.dbSaveData) {
+            window.dbSaveData(key, data);
+        }
+    }
+
+    function getData(key, defaultData) {
+        try {
+            const data = localStorage.getItem('olivet_' + key);
+            return data ? JSON.parse(data) : defaultData;
+        } catch(e) {
+            return defaultData;
+        }
+    }
+
+    /* ACTIVITY LOGGING SYSTEM */
+    function addLog(actionDescription) {
+        const currentUser = getData('auth_user', { nickname: 'Guest' });
+        const displayUser = currentUser.nickname || 'Guest';
+        const logs = getData('activity_logs', []);
+        const now = new Date().toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
+
+        const logEntry = {
+            user: displayUser,
+            action: actionDescription,
+            timestamp: now
+        };
+
+        logs.unshift(logEntry); 
+        if (logs.length > 50) logs.pop(); 
+
+        saveData('activity_logs', logs);
+        renderLogs();
+    }
+
+    function renderLogs() {
+        const logContainer = document.getElementById('logContainer');
+        const logs = getData('activity_logs', []);
+        
+        if (!logContainer) return;
+        if (logs.length === 0) {
+            logContainer.innerHTML = `<div style="text-align: center; opacity: 0.6; padding: 20px;">No recent activities logged.</div>`;
+            return;
+        }
+
+        logContainer.innerHTML = logs.map(l => `
+            <div class="log-item">
+                <span class="log-user">${escapeHtml(l.user)}</span>
+                <div>${escapeHtml(l.action)}</div>
+                <span class="log-time"><i class="fa-regular fa-clock"></i> ${escapeHtml(l.timestamp)}</span>
+            </div>
+        `).join('');
+    }
+
+    function toggleLogPanel() {
+        const panel = document.getElementById('logPanel');
+        const icon = document.getElementById('logToggleIcon');
+        panel.classList.toggle('open');
+        if (panel.classList.contains('open')) {
+            icon.className = 'fa-solid fa-chevron-right';
+        } else {
+            icon.className = 'fa-solid fa-chevron-left';
+        }
+    }
+
+    function clearLogs() {
+        if (confirm('Are you sure you want to clear all activity logs?')) {
+            saveData('activity_logs', []);
+            renderLogs();
+        }
+    }
+
+    function initAuthUI() {
+        const currentUser = getData('auth_user', null);
+        const loginBtnText = document.getElementById('loginBtnText');
+        const loginIcon = document.getElementById('loginIcon');
+        const userBadge = document.getElementById('userBadge');
+        const userNicknameSpan = document.getElementById('userNicknameSpan');
+
+        if (currentUser && currentUser.nickname) {
+            loginBtnText.textContent = 'Logout';
+            loginIcon.className = 'fa-solid fa-right-from-bracket';
+            userBadge.style.display = 'flex';
+            userNicknameSpan.textContent = currentUser.nickname;
+        } else {
+            loginBtnText.textContent = 'Login with Google';
+            loginIcon.className = 'fa-brands fa-google';
+            userBadge.style.display = 'none';
+        }
+    }
+
+    function getUserId() {
+        let userId = localStorage.getItem('olivet_user_id');
+        if (!userId) {
+            userId = 'guest_' + Math.random().toString(36).substring(2, 9);
+            localStorage.setItem('olivet_user_id', userId);
+        }
+        return userId;
+    }
+
+    function autoResizeTextarea(element, minHeight = 38) {
+        element.style.height = 'auto';
+        const newHeight = element.scrollHeight;
+        element.style.height = (newHeight > minHeight ? newHeight : minHeight) + 'px';
+        applySubjectTag(element);
+    }
+
+    function resizeAllTextareas() {
+        setTimeout(() => {
+            document.querySelectorAll('.auto-expand').forEach(el => autoResizeTextarea(el));
+        }, 15);
+    }
+
+    function applySubjectTag(element) {
+        if (!element.closest('#scheduleTable')) return;
+
+        const val = element.value.toLowerCase();
+        const subjects = [
+            { name: 'math', keywords: ['math'], color: 'rgba(231, 76, 60, 0.35)' },
+            { name: 'science', keywords: ['science', 'chem', 'bio', 'physics'], color: 'rgba(230, 126, 34, 0.35)' },
+            { name: 'english', keywords: ['english', 'lit'], color: 'rgba(241, 196, 15, 0.4)' },
+            { name: 'history', keywords: ['history', 'social'], color: 'rgba(46, 204, 113, 0.35)' },
+            { name: 'pe', keywords: ['pe', 'gym'], color: 'rgba(52, 152, 219, 0.35)' },
+            { name: 'art', keywords: ['art', 'music'], color: 'rgba(63, 81, 181, 0.35)' },
+            { name: 'chapel', keywords: ['chapel', 'bible'], color: 'rgba(155, 89, 182, 0.35)' },
+            { name: 'elective', keywords: ['elective'], color: 'rgba(149, 165, 166, 0.4)' }
+        ];
+
+        subjects.forEach(s => element.classList.remove(`tag-${s.name}`));
+        element.style.background = '';
+
+        const matched = subjects.filter(s => s.keywords.some(kw => val.includes(kw)));
+
+        if (matched.length === 1) {
+            element.classList.add(`tag-${matched[0].name}`);
+        } else if (matched.length >= 2) {
+            const c1 = matched[0].color;
+            const c2 = matched[1].color;
+            element.style.background = `linear-gradient(90deg, ${c1} 0%, ${c1} 50%, ${c2} 50%, ${c2} 100%)`;
+        }
+    }
+
+    function toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        saveData('dark_mode', isDark);
+        updateThemeUI(isDark);
+    }
+
+    function updateThemeUI(isDark) {
+        const icon = document.getElementById('themeIcon');
+        const text = document.getElementById('themeText');
+        if (isDark) {
+            icon.className = 'fa-solid fa-sun';
+            text.textContent = 'Light Mode';
+        } else {
+            icon.className = 'fa-solid fa-moon';
+            text.textContent = 'Dark Mode';
+        }
+    }
+
+    function initTheme() {
+        const isDark = getData('dark_mode', false);
+        if (isDark) document.body.classList.add('dark-mode');
+        updateThemeUI(isDark);
+    }
+
+    function initBibleVerse() {
+        const randomVerse = bibleVerses[Math.floor(Math.random() * bibleVerses.length)];
+        document.getElementById('bibleVerse').textContent = randomVerse.text;
+        document.getElementById('bibleRef').textContent = randomVerse.ref;
+    }
+
+    function initMeals() {
+        const tbody = document.getElementById('mealTableBody');
+        const meals = getData('meals', {});
+        const votes = getData('meal_sticker_votes', {}); 
+        const userId = getUserId();
+        tbody.innerHTML = '';
+
+        mealTypes.forEach(meal => {
+            const tr = document.createElement('tr');
+            let rowHtml = `<td class="meal-type-header">${escapeHtml(meal.name)}</td>`;
+
+            daysOfWeek.forEach(day => {
+                const dayData = meals[day] || { b: '', l: '', d: '' };
+                const textVal = dayData[meal.key] || '';
+                const baseVoteKey = `${day}_${meal.key}`;
+
+                let stickerBarHtml = `<div class="sticker-bar" id="bar_${baseVoteKey}">`;
+                
+                stickerTypes.forEach(st => {
+                    const stVoteKey = `${baseVoteKey}_${st.key}`;
+                    const userList = Array.isArray(votes[stVoteKey]) ? votes[stVoteKey] : [];
+                    const voteCount = userList.length;
+                    const isSelected = userList.includes(userId);
+                    const activeClass = isSelected ? 'selected' : '';
+
+                    stickerBarHtml += `
+                        <button class="sticker-btn ${activeClass}" 
+                                id="btn_${stVoteKey}" 
+                                onclick="voteSticker('${day}', '${meal.key}', '${st.key}')" 
+                                title="${st.label}">
+                            <span class="emoji">${st.emoji}</span>
+                            <span id="count_${stVoteKey}">${voteCount}</span>
+                        </button>
+                    `;
+                });
+
+                stickerBarHtml += `</div>`;
+
+                rowHtml += `
+                    <td>
+                        <div class="meal-cell-container">
+                            <textarea class="auto-expand" 
+                                      placeholder="Menu..."
+                                      oninput="autoResizeTextarea(this); debouncedSaveMeal('${day}', '${meal.key}', this.value)"
+                            >${escapeHtml(textVal)}</textarea>
+                            ${stickerBarHtml}
+                        </div>
+                    </td>
+                `;
+            });
+
+            tr.innerHTML = rowHtml;
+            tbody.appendChild(tr);
+        });
+        resizeAllTextareas();
+    }
+
+    function saveMeal(day, type, value) {
+        const meals = getData('meals', {});
+        if (!meals[day]) meals[day] = { b: '', l: '', d: '' };
+        
+        if (meals[day][type] !== value) {
+            meals[day][type] = value;
+            saveData('meals', meals);
+            addLog(`Updated ${day} ${type.toUpperCase()} meal: "${value}"`);
+        }
+    }
+
+    const debouncedSaveMeal = debounce((day, type, val) => saveMeal(day, type, val), 300);
+
+    function voteSticker(day, mealKey, stickerKey) {
+        const votes = getData('meal_sticker_votes', {});
+        const userId = getUserId();
+        const baseVoteKey = `${day}_${mealKey}`;
+        const targetStVoteKey = `${baseVoteKey}_${stickerKey}`;
+
+        let currentSelectedKey = null;
+
+        stickerTypes.forEach(st => {
+            const key = `${baseVoteKey}_${st.key}`;
+            if (Array.isArray(votes[key]) && votes[key].includes(userId)) {
+                currentSelectedKey = st.key;
+            }
+        });
+
+        if (currentSelectedKey === stickerKey) {
+            const idx = votes[targetStVoteKey].indexOf(userId);
+            if (idx !== -1) votes[targetStVoteKey].splice(idx, 1);
+            addLog(`Removed rating on ${day} ${mealKey.toUpperCase()} meal`);
+        } else {
+            if (currentSelectedKey) {
+                const prevKey = `${baseVoteKey}_${currentSelectedKey}`;
+                const prevIdx = votes[prevKey].indexOf(userId);
+                if (prevIdx !== -1) votes[prevKey].splice(prevIdx, 1);
+            }
+
+            if (!Array.isArray(votes[targetStVoteKey])) {
+                votes[targetStVoteKey] = [];
+            }
+            votes[targetStVoteKey].push(userId);
+            addLog(`Voted [${stickerKey}] for ${day} ${mealKey.toUpperCase()} meal`);
+        }
+
+        saveData('meal_sticker_votes', votes);
+
+        stickerTypes.forEach(st => {
+            const key = `${baseVoteKey}_${st.key}`;
+            const userList = Array.isArray(votes[key]) ? votes[key] : [];
+            const btn = document.getElementById(`btn_${key}`);
+            const countSpan = document.getElementById(`count_${key}`);
+
+            if (btn && countSpan) {
+                countSpan.textContent = userList.length;
+                if (userList.includes(userId)) {
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.remove('selected');
+                }
+            }
+        });
+    }
+
+    function initCooking() {
+        const cookingGrid = document.getElementById('cookingGrid');
+        const cooking = getData('cooking', {});
+        cookingGrid.innerHTML = '';
+
+        weekendDays.forEach((day, index) => {
+            const dayData = cooking[day] || { l: '', d: '' };
+            const noteColor = index === 0 ? 'sticky-yellow' : 'sticky-blue';
+            const box = document.createElement('div');
+            box.className = `sticky-note ${noteColor}`;
+            box.innerHTML = `
+                <h3><i class="fa-solid fa-utensils"></i> ${escapeHtml(day)} Cooking</h3>
+                <label>Lunch Cook</label>
+                <textarea class="auto-expand" placeholder="Assigned student..." oninput="autoResizeTextarea(this); debouncedSaveCooking('${day}', 'l', this.value)">${escapeHtml(dayData.l || '')}</textarea>
+                <label>Dinner Cook</label>
+                <textarea class="auto-expand" placeholder="Assigned student..." oninput="autoResizeTextarea(this); debouncedSaveCooking('${day}', 'd', this.value)">${escapeHtml(dayData.d || '')}</textarea>
+            `;
+            cookingGrid.appendChild(box);
+        });
+        resizeAllTextareas();
+    }
+
+    function saveCooking(day, type, value) {
+        const cooking = getData('cooking', {});
+        if (!cooking[day]) cooking[day] = { l: '', d: '' };
+        if (cooking[day][type] !== value) {
+            cooking[day][type] = value;
+            saveData('cooking', cooking);
+            addLog(`Updated ${day} ${type === 'l' ? 'Lunch' : 'Dinner'} Cook: "${value}"`);
+        }
+    }
+
+    const debouncedSaveCooking = debounce((day, type, val) => saveCooking(day, type, val), 300);
+
+    function initCleaning() {
+        const cleaningGrid = document.getElementById('cleaningGrid');
+        const cleaning = getData('cleaning', {});
+        cleaningGrid.innerHTML = '';
+
+        const colors = ['sticky-yellow', 'sticky-blue', 'sticky-pink', 'sticky-green'];
+
+        daysOfWeek.forEach((day, idx) => {
+            const person = cleaning[day] || '';
+            const box = document.createElement('div');
+            box.className = `sticky-note ${colors[idx % colors.length]}`;
+            box.innerHTML = `
+                <h4><i class="fa-solid fa-broom"></i> ${escapeHtml(day.substring(0, 3))}</h4>
+                <textarea class="auto-expand" placeholder="Student name..." oninput="autoResizeTextarea(this); debouncedSaveCleaning('${day}', this.value)">${escapeHtml(person)}</textarea>
+            `;
+            cleaningGrid.appendChild(box);
+        });
+        resizeAllTextareas();
+    }
+
+    function saveCleaning(day, value) {
+        const cleaning = getData('cleaning', {});
+        if (cleaning[day] !== value) {
+            cleaning[day] = value;
+            saveData('cleaning', cleaning);
+            addLog(`Updated Cafeteria Cleaning (${day}): "${value}"`);
+        }
+    }
+
+    const debouncedSaveCleaning = debounce((day, val) => saveCleaning(day, val), 300);
+
+    function initDormTables() {
+        renderDormTable('girlsDormTable', 'girlsDormData');
+        renderDormTable('boysDormTable', 'boysDormData');
+    }
+
+    function renderDormTable(tableId, storageKey) {
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        let data = getData(storageKey, null);
+        
+        if (!data || !Array.isArray(data)) {
+            data = Array(6).fill().map(() => ({ area: '', person: '' }));
+            saveData(storageKey, data);
+        }
+
+        tbody.innerHTML = '';
+        data.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><textarea class="auto-expand" placeholder="Area..." oninput="autoResizeTextarea(this); debouncedSaveDormRow('${storageKey}', ${index}, 'area', this.value)">${escapeHtml(item.area || '')}</textarea></td>
+                <td><textarea class="auto-expand" placeholder="Student..." oninput="autoResizeTextarea(this); debouncedSaveDormRow('${storageKey}', ${index}, 'person', this.value)">${escapeHtml(item.person || '')}</textarea></td>
+                <td style="vertical-align: middle; text-align: center;"><button class="btn btn-danger" onclick="deleteDormRow('${storageKey}', ${index}, '${tableId}')">X</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        resizeAllTextareas();
+    }
+
+    function saveDormRow(storageKey, index, field, value) {
+        const data = getData(storageKey, []);
+        if (!data[index]) data[index] = { area: '', person: '' };
+        if (data[index][field] !== value) {
+            data[index][field] = value;
+            saveData(storageKey, data);
+            const dormName = storageKey.includes('girls') ? "Girls' Dorm" : "Boys' Dorm";
+            addLog(`Updated ${dormName} cleaning row ${index + 1}`);
+        }
+    }
+
+    const debouncedSaveDormRow = debounce((key, idx, fld, val) => saveDormRow(key, idx, fld, val), 300);
+
+    function addDormRow(tableId) {
+        const storageKey = tableId === 'girlsDormTable' ? 'girlsDormData' : 'boysDormData';
+        const data = getData(storageKey, []);
+        data.push({ area: '', person: '' });
+        saveData(storageKey, data);
+        renderDormTable(tableId, storageKey);
+        addLog(`Added new row to ${tableId === 'girlsDormTable' ? "Girls' Dorm" : "Boys' Dorm"}`);
+    }
+
+    function deleteDormRow(storageKey, index, tableId) {
+        const data = getData(storageKey, []);
+        data.splice(index, 1);
+        saveData(storageKey, data);
+        renderDormTable(tableId, storageKey);
+        addLog(`Deleted row from ${tableId === 'girlsDormTable' ? "Girls' Dorm" : "Boys' Dorm"}`);
+    }
+
+    const defaultSchedule = [
+        { time: '07:00 AM', name: 'Wake-up Time' },
+        { time: '07:30 AM', name: 'Breakfast' },
+        { time: '08:30 AM', name: 'Period 1' },
+        { time: '09:30 AM', name: 'Period 2' },
+        { time: '10:30 AM', name: 'Period 3' },
+        { time: '11:30 AM', name: 'Period 4' },
+        { time: '12:30 PM', name: 'Lunch Time' },
+        { time: '01:30 PM', name: 'Period 5' },
+        { time: '02:30 PM', name: 'Period 6' },
+        { time: '03:30 PM', name: 'Period 7' },
+        { time: '04:30 PM', name: 'After School' },
+        { time: '06:00 PM', name: 'Dinner Time' },
+        { time: '10:00 PM', name: 'Lights Out' }
+    ];
+
+    let selectedSwapIndex = null;
+
+    function loadScheduleAndSideNotes() {
+        const grade = document.getElementById('gradeSelect').value;
+        selectedSwapIndex = null;
+
+        const key = 'schedule_g' + grade;
+        const tbody = document.querySelector('#scheduleTable tbody');
+        let schedule = getData(key, defaultSchedule);
+
+        if (!Array.isArray(schedule)) schedule = defaultSchedule;
+
+        tbody.innerHTML = '';
+        schedule.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="text-align: center; vertical-align: middle;">
+                    <button class="btn-swap ${selectedSwapIndex === index ? 'selected' : ''}" 
+                            title="Click to select and swap with another row" 
+                            onclick="handleSwapClick(${index})">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </td>
+                <td><textarea class="auto-expand" oninput="autoResizeTextarea(this); debouncedSaveScheduleItem(${index}, 'time', this.value)">${escapeHtml(item.time || '')}</textarea></td>
+                <td><textarea class="auto-expand" oninput="autoResizeTextarea(this); debouncedSaveScheduleItem(${index}, 'name', this.value)">${escapeHtml(item.name || '')}</textarea></td>
+                <td style="vertical-align: middle; text-align: center;"><button class="btn btn-danger" onclick="deleteScheduleItem(${index})">X</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        ['sideBring', 'sideAnnounce', 'sideTodo', 'sideTodoGreen'].forEach(id => {
+            const sideKey = `side_${id}_g${grade}`;
+            const elem = document.getElementById(id);
+            if (elem) {
+                elem.value = getData(sideKey, '');
+                autoResizeTextarea(elem, 80);
+            }
+        });
+
+        resizeAllTextareas();
+    }
+
+    function handleSwapClick(index) {
+        if (selectedSwapIndex === null) {
+            selectedSwapIndex = index;
+            highlightSwapButtons();
+        } else if (selectedSwapIndex === index) {
+            selectedSwapIndex = null;
+            highlightSwapButtons();
+        } else {
+            const grade = document.getElementById('gradeSelect').value;
+            const key = 'schedule_g' + grade;
+            let schedule = getData(key, defaultSchedule);
+
+            const temp = schedule[selectedSwapIndex];
+            schedule[selectedSwapIndex] = schedule[index];
+            schedule[index] = temp;
+
+            saveData(key, schedule);
+            addLog(`Swapped Grade ${grade} schedule items (Slot ${selectedSwapIndex + 1} & Slot ${index + 1})`);
+            selectedSwapIndex = null;
+            loadScheduleAndSideNotes();
+        }
+    }
+
+    function highlightSwapButtons() {
+        const buttons = document.querySelectorAll('#scheduleTable .btn-swap');
+        buttons.forEach((btn, idx) => {
+            if (idx === selectedSwapIndex) btn.classList.add('selected');
+            else btn.classList.remove('selected');
+        });
+    }
+
+    function saveScheduleItem(index, field, value) {
+        const grade = document.getElementById('gradeSelect').value;
+        const key = 'schedule_g' + grade;
+        let schedule = getData(key, defaultSchedule);
+        if (schedule[index]) {
+            schedule[index][field] = value;
+            saveData(key, schedule);
+            addLog(`Updated Grade ${grade} schedule slot ${index + 1}`);
+        }
+    }
+
+    const debouncedSaveScheduleItem = debounce((idx, fld, val) => saveScheduleItem(idx, fld, val), 300);
+
+    function addScheduleRow() {
+        const grade = document.getElementById('gradeSelect').value;
+        const key = 'schedule_g' + grade;
+        let schedule = getData(key, defaultSchedule);
+        schedule.push({ time: '', name: '' });
+        saveData(key, schedule);
+        loadScheduleAndSideNotes();
+        addLog(`Added new schedule slot for Grade ${grade}`);
+    }
+
+    function deleteScheduleItem(index) {
+        const grade = document.getElementById('gradeSelect').value;
+        const key = 'schedule_g' + grade;
+        let schedule = getData(key, defaultSchedule);
+        schedule.splice(index, 1);
+        saveData(key, schedule);
+        loadScheduleAndSideNotes();
+        addLog(`Deleted schedule slot from Grade ${grade}`);
+    }
+
+    function saveSideContent(fieldId) {
+        const grade = document.getElementById('gradeSelect').value;
+        const sideKey = `side_${fieldId}_g${grade}`;
+        const val = document.getElementById(fieldId).value;
+        saveData(sideKey, val);
+        addLog(`Updated sticky note (${fieldId}) for Grade ${grade}`);
+    }
+
+    const debouncedSaveSideContent = debounce((id) => saveSideContent(id), 300);
+
+    let currentCalendarDate = new Date();
+
+    function renderCalendar() {
+        const monthYearElem = document.getElementById('calendarMonthYear');
+        const daysElem = document.getElementById('calendarDays');
+        daysElem.innerHTML = '';
+
+        const year = currentCalendarDate.getFullYear();
+        const month = currentCalendarDate.getMonth();
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        monthYearElem.textContent = `${new Date(year, month).toLocaleString('en-US', { month: 'long' })} ${year}`;
+
+        const calDataKey = `calendar_${year}_${month}`;
+        const savedCalData = getData(calDataKey, {});
+
+        for (let i = 0; i < firstDay; i++) {
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'calendar-day';
+            emptyCell.style.opacity = '0.4';
+            daysElem.appendChild(emptyCell);
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayCell = document.createElement('div');
+            dayCell.className = 'calendar-day';
+            const val = savedCalData[day] || '';
+
+            dayCell.innerHTML = `
+                <div class="date-num">${day}</div>
+                <textarea class="auto-expand" style="padding:2px; min-height:45px; border:none; background:transparent;" oninput="autoResizeTextarea(this, 45); debouncedSaveCalendarEvent(${year}, ${month}, ${day}, this.value)">${escapeHtml(val)}</textarea>
+            `;
+            daysElem.appendChild(dayCell);
+        }
+        resizeAllTextareas();
+    }
+
+    function saveCalendarEvent(year, month, day, text) {
+        const calDataKey = `calendar_${year}_${month}`;
+        const savedCalData = getData(calDataKey, {});
+        savedCalData[day] = text;
+        saveData(calDataKey, savedCalData);
+        addLog(`Updated calendar event on ${month + 1}/${day}/${year}`);
+    }
+
+    const debouncedSaveCalendarEvent = debounce((y, m, d, txt) => saveCalendarEvent(y, m, d, txt), 300);
+
+    function changeMonth(direction) {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+        renderCalendar();
+    }
+
+    function exportData() {
+        const exportObj = {};
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('olivet_'));
+        keys.forEach(key => exportObj[key] = localStorage.getItem(key));
+        
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
+        const downloadAnchor = document.createElement('a');
+        const today = new Date().toISOString().slice(0,10);
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `olivet_scheduler_backup_${today}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        addLog('Downloaded data backup');
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedObj = JSON.parse(e.target.result);
+                if (typeof importedObj !== 'object' || importedObj === null) throw new Error("Invalid object");
+
+                if (confirm('Importing this file will overwrite existing data. Continue?')) {
+                    Object.keys(importedObj).forEach(key => {
+                        if (key.startsWith('olivet_') && typeof importedObj[key] === 'string') {
+                            localStorage.setItem(key, importedObj[key]);
+                        }
+                    });
+                    addLog('Restored data from backup file');
+                    alert('Data successfully restored!');
+                    location.reload();
+                }
+            } catch (err) {
+                alert('Invalid JSON backup file or corrupted data.');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function resetAllData() {
+        if (confirm('Are you sure you want to delete ALL scheduler data? This cannot be undone.')) {
+            const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('olivet_') && k !== 'olivet_undo_backup');
+            const backupObj = {};
+
+            keysToRemove.forEach(key => {
+                backupObj[key] = localStorage.getItem(key);
+                localStorage.removeItem(key);
+            });
+
+            localStorage.setItem('olivet_undo_backup', JSON.stringify(backupObj));
+            addLog('Performed Reset All Data');
+            alert('All data has been reset! You can click "Undo Reset" to recover if needed.');
+            location.reload();
+        }
+    }
+
+    function undoResetData() {
+        const undoData = localStorage.getItem('olivet_undo_backup');
+        if (!undoData) {
+            alert('No backup found to restore.');
+            return;
+        }
+
+        if (confirm('Restore previous data before the last reset?')) {
+            try {
+                const parsed = JSON.parse(undoData);
+                Object.keys(parsed).forEach(key => localStorage.setItem(key, parsed[key]));
+                localStorage.removeItem('olivet_undo_backup');
+                addLog('Performed Undo Reset');
+                alert('Reset undone! Your data has been restored.');
+                location.reload();
+            } catch (e) {
+                alert('Failed to restore data.');
+            }
+        }
+    }
+
+    /* TUTORIAL SYSTEM INTERACTIVE CODE */
+    const tutorialSteps = [
+        {
+            title: "Welcome to Olivet Scheduler!",
+            text: "This guide will walk you through setting up and customizing your weekly scheduler.",
+            element: null,
+            inputPlaceholder: null
+        },
+        {
+            title: "1. Meal Menu & Sticker Ratings",
+            text: "Enter your menu for Breakfast, Lunch, and Dinner. Rate meals using interactive stickers!",
+            element: "#sec-meals",
+            inputPlaceholder: "Type a sample meal menu (e.g., Pancakes & Orange Juice)...",
+            onNext: (value) => {
+                if (value && value.trim() !== "") {
+                    const meals = getData('meals', {});
+                    if (!meals['Monday']) meals['Monday'] = { b: '', l: '', d: '' };
+                    meals['Monday']['b'] = value;
+                    saveData('meals', meals);
+                    initMeals();
+                }
+            }
+        },
+        {
+            title: "2. Weekend Cooking Team",
+            text: "Assign cooking duties for Saturday and Sunday Lunch and Dinner.",
+            element: "#sec-cooking",
+            inputPlaceholder: "Type student name for Saturday Lunch...",
+            onNext: (value) => {
+                if (value && value.trim() !== "") {
+                    const cooking = getData('cooking', {});
+                    if (!cooking['Saturday']) cooking['Saturday'] = { l: '', d: '' };
+                    cooking['Saturday']['l'] = value;
+                    saveData('cooking', cooking);
+                    initCooking();
+                }
+            }
+        },
+        {
+            title: "3. Cafeteria Cleaning Team",
+            text: "Assign students responsible for daily cafeteria cleanup.",
+            element: "#sec-cafeteria-cleaning",
+            inputPlaceholder: "Type student name for Monday cleaning...",
+            onNext: (value) => {
+                if (value && value.trim() !== "") {
+                    const cleaning = getData('cleaning', {});
+                    cleaning['Monday'] = value;
+                    saveData('cleaning', cleaning);
+                    initCleaning();
+                }
+            }
+        },
+        {
+            title: "4. Dormitory Cleaning Teams",
+            text: "Separate cleaning schedules for Girls' and Boys' dormitories.",
+            element: "#sec-dorm-cleaning",
+            inputPlaceholder: "Type a cleaning area (e.g., Main Hallway)...",
+            onNext: (value) => {
+                if (value && value.trim() !== "") {
+                    const data = getData('girlsDormData', []);
+                    if (data.length > 0) data[0].area = value;
+                    else data.push({ area: value, person: '' });
+                    saveData('girlsDormData', data);
+                    renderDormTable('girlsDormTable', 'girlsDormData');
+                }
+            }
+        },
+        {
+            title: "5. Grade Class Schedule",
+            text: "Select your grade to manage daily period times and subjects. Subjects automatically highlight based on keywords!",
+            element: "#sec-schedule",
+            inputPlaceholder: "Type a class name (e.g., Math, Science, PE, Chapel)...",
+            onNext: (value) => {
+                if (value && value.trim() !== "") {
+                    const grade = document.getElementById('gradeSelect').value;
+                    const key = 'schedule_g' + grade;
+                    let schedule = getData(key, defaultSchedule);
+                    if (schedule.length > 0) schedule[0].name = value;
+                    saveData(key, schedule);
+                    loadScheduleAndSideNotes();
+                }
+            }
+        },
+        {
+            title: "6. Sticky Notes & Reminders",
+            text: "Keep track of supplies, announcements, deadlines, and tasks right alongside your class schedule.",
+            element: ".schedule-side",
+            inputPlaceholder: "Type a quick reminder for items to bring tomorrow...",
+            onNext: (value) => {
+                if (value && value.trim() !== "") {
+                    const grade = document.getElementById('gradeSelect').value;
+                    saveData(`side_sideBring_g${grade}`, value);
+                    loadScheduleAndSideNotes();
+                }
+            }
+        },
+        {
+            title: "7. School Calendar",
+            text: "View and log upcoming school events for any day of the month.",
+            element: "#sec-calendar",
+            inputPlaceholder: "Type a calendar note (e.g., Science Fair at 2 PM)...",
+            onNext: (value) => {
+                if (value && value.trim() !== "") {
+                    const year = currentCalendarDate.getFullYear();
+                    const month = currentCalendarDate.getMonth();
+                    saveCalendarEvent(year, month, 1, value);
+                    renderCalendar();
+                }
+            }
+        },
+        {
+            title: "8. Activity Log",
+            text: "Track all recent updates, schedule changes, and sticker votes in real-time.",
+            element: "#logPanel",
+            inputPlaceholder: null
+        }
+    ];
+
+    let currentTutorialStep = 0;
+
+    function startTutorial() {
+        currentTutorialStep = 0;
+        document.getElementById('tutorialOverlay').style.display = 'block';
+        showTutorialStep(currentTutorialStep);
+        addLog('Started Tutorial');
+    }
+
+    function showTutorialStep(stepIdx) {
+        const step = tutorialSteps[stepIdx];
+        const spotlight = document.getElementById('tutorialSpotlight');
+        const popover = document.getElementById('tutorialPopover');
+        const tutTitle = document.getElementById('tutTitle');
+        const tutText = document.getElementById('tutText');
+        const tutInputArea = document.getElementById('tutInputArea');
+        const tutStepCount = document.getElementById('tutStepCount');
+        const nextBtn = document.getElementById('tutNextBtn');
+
+        tutTitle.innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${escapeHtml(step.title)}`;
+        tutText.textContent = step.text;
+        tutStepCount.textContent = `${stepIdx + 1} / ${tutorialSteps.length}`;
+        nextBtn.textContent = (stepIdx === tutorialSteps.length - 1) ? 'Finish' : 'Next';
+
+        if (step.inputPlaceholder) {
+            tutInputArea.innerHTML = `
+                <div class="tutorial-input-group">
+                    <input type="text" id="tutInput" class="tutorial-input" placeholder="${escapeHtml(step.inputPlaceholder)}">
+                </div>
+            `;
+            setTimeout(() => {
+                const inp = document.getElementById('tutInput');
+                if (inp) inp.focus();
+            }, 100);
+        } else {
+            tutInputArea.innerHTML = '';
+        }
+
+        if (step.element) {
+            const el = document.querySelector(step.element);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const rect = el.getBoundingClientRect();
+                
+                spotlight.style.left = `${rect.left - 8}px`;
+                spotlight.style.top = `${rect.top - 8}px`;
+                spotlight.style.width = `${rect.width + 16}px`;
+                spotlight.style.height = `${rect.height + 16}px`;
+                spotlight.style.display = 'block';
+
+                const popoverHeight = 220;
+                let topPos = rect.bottom + 15;
+                if (topPos + popoverHeight > window.innerHeight) {
+                    topPos = Math.max(10, rect.top - popoverHeight - 15);
+                }
+
+                let leftPos = rect.left + (rect.width / 2) - 170;
+                leftPos = Math.max(20, Math.min(window.innerWidth - 360, leftPos));
+
+                popover.style.top = `${topPos}px`;
+                popover.style.left = `${leftPos}px`;
+            } else {
+                positionPopoverCenter();
+            }
+        } else {
+            spotlight.style.display = 'none';
+            positionPopoverCenter();
+        }
+    }
+
+    function positionPopoverCenter() {
+        const popover = document.getElementById('tutorialPopover');
+        popover.style.top = '50%';
+        popover.style.left = '50%';
+        popover.style.transform = 'translate(-50%, -50%)';
+    }
+
+    function nextTutorialStep() {
+        const step = tutorialSteps[currentTutorialStep];
+        const inputElem = document.getElementById('tutInput');
+        
+        if (step && step.onNext && inputElem) {
+            step.onNext(inputElem.value);
+        }
+
+        currentTutorialStep++;
+        if (currentTutorialStep >= tutorialSteps.length) {
+            endTutorial();
+        } else {
+            const popover = document.getElementById('tutorialPopover');
+            popover.style.transform = 'none';
+            showTutorialStep(currentTutorialStep);
+        }
+    }
+
+    function handleSkipClick() {
+        endTutorial();
+    }
+
+    function endTutorial() {
+        document.getElementById('tutorialOverlay').style.display = 'none';
+        addLog('Completed or Skipped Tutorial');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        initTheme();
+        initBibleVerse();
+        initAuthUI();
+        initMeals();
+        initCooking();
+        initCleaning();
+        initDormTables();
+        loadScheduleAndSideNotes();
+        renderCalendar();
+        renderLogs();
+
+        window.addEventListener('resize', resizeAllTextareas);
+    });
+</script>
+
+</body>
+</html>
