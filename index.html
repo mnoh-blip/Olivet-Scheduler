@@ -4,17 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Olivet Scheduler</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <!-- Google Identity Services SDK -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         :root {
-            --primary-red: #c0392b;
-            --dark-red: #962d22;
+            --primary-red: #900c3f;
+            --dark-red: #581845;
             --light-red: #fadbd8;
+            --bg-red-gradient: linear-gradient(135deg, #78281f 0%, #512e5f 100%);
+            --bg-body-red: #2c0808;
             --bg-white: #ffffff;
-            --off-white: #f7f7f7;
-            --border-color: #e0e0e0;
+            --off-white: #fcedec;
+            --border-color: #e6b0aa;
             --text-color: #2c3e50;
             --card-bg: #ffffff;
             
@@ -32,14 +33,15 @@
         }
 
         body.dark-mode {
+            --bg-body-red: #1a0303;
             --bg-white: #1e1e1e;
-            --off-white: #121212;
-            --border-color: #333333;
-            --text-color: #e0e0e0;
-            --card-bg: #1e1e1e;
+            --off-white: #2a0a0a;
+            --border-color: #5c1d1d;
+            --text-color: #f2d7d5;
+            --card-bg: #260d0d;
             --light-red: #4a1510;
-            --primary-red: #e74c3c;
-            --dark-red: #ff6b6b;
+            --primary-red: #c0392b;
+            --dark-red: #e74c3c;
             
             --note-yellow: #333018;
             --note-blue: #152935;
@@ -49,26 +51,108 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: var(--off-white); color: var(--text-color); padding: 20px; transition: background-color 0.3s, color 0.3s; overflow-x: hidden; }
-        header { background-color: var(--primary-red); color: white; text-align: center; padding: 25px 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; gap: 15px; position: relative; }
-        header h1 { font-size: 2.2rem; letter-spacing: 1px; display: flex; align-items: center; gap: 12px; }
+        body { background: var(--bg-body-red); color: var(--text-color); padding: 20px; transition: background-color 0.3s, color 0.3s; overflow-x: hidden; }
+
+        /* Guest View Control */
+        body:not(.is-logged-in) .main-app-content,
+        body:not(.is-logged-in) #logPanel {
+            display: none !important;
+        }
+
+        .guest-login-overlay {
+            display: none;
+            min-height: 80vh;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+
+        body:not(.is-logged-in) .guest-login-overlay {
+            display: flex;
+        }
+
+        .guest-login-card {
+            background: linear-gradient(135deg, #c0392b 0%, #78281f 100%);
+            padding: 50px 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            max-width: 450px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+        }
+
+        .guest-login-card h1 {
+            font-size: 2.2rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+        }
+
+        .guest-login-btn {
+            background: #ffffff;
+            color: #78281f;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+
+        .guest-login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+            background: #fcedec;
+        }
+        
+        header { 
+            background: linear-gradient(135deg, #c0392b 0%, #78281f 100%); 
+            color: white; 
+            text-align: center; 
+            padding: 25px 20px; 
+            border-radius: 12px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 15px; 
+            position: relative; 
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        header h1 { font-size: 2.2rem; letter-spacing: 1px; display: flex; align-items: center; gap: 12px; text-shadow: 1px 1px 3px rgba(0,0,0,0.4); }
 
         .header-controls { position: absolute; right: 20px; display: flex; align-items: center; gap: 10px; }
 
-        .theme-toggle-btn, .login-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
+        .theme-toggle-btn, .login-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
         .theme-toggle-btn:hover, .login-btn:hover { background: rgba(255,255,255,0.35); }
 
-        .user-profile-badge { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.3); }
+        .user-profile-badge { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; background: rgba(0,0,0,0.3); padding: 5px 12px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.3); color: #fff; }
 
-        .bible-banner { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 5px solid #f39c12; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .bible-banner i { color: #f39c12; font-size: 1.4rem; }
+        .admin-badge { background-color: #f1c40f; color: #7f8c8d; font-size: 0.7rem; padding: 2px 6px; border-radius: 8px; font-weight: bold; margin-left: 4px; text-transform: uppercase; color: #000; }
+
+        .bible-banner { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 5px solid #e74c3c; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+        .bible-banner i { color: #e74c3c; font-size: 1.4rem; }
         .bible-text { font-style: italic; font-size: 0.95rem; }
-        .bible-ref { font-weight: bold; font-style: normal; margin-left: 8px; color: var(--dark-red); }
+        .bible-ref { font-weight: bold; font-style: normal; margin-left: 8px; color: var(--primary-red); }
 
-        .quick-nav { display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px; background: var(--card-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .quick-nav { display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px; background: var(--card-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
         .nav-row { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; }
         .nav-row-divider { height: 1px; background-color: var(--border-color); margin: 2px 0; }
-        .nav-item { display: flex; align-items: center; gap: 8px; background-color: var(--light-red); border: 1px solid var(--light-red); color: var(--dark-red); padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold; font-size: 0.9rem; transition: all 0.2s ease; cursor: pointer; }
+        .nav-item { display: flex; align-items: center; gap: 8px; background-color: var(--light-red); border: 1px solid var(--border-color); color: var(--primary-red); padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold; font-size: 0.9rem; transition: all 0.2s ease; cursor: pointer; }
         .nav-item i { font-size: 1rem; }
         .nav-item:hover { background-color: var(--primary-red); color: white; transform: translateY(-2px); }
         .nav-row-actions .nav-item { padding: 5px 12px; font-size: 0.8rem; gap: 6px; font-weight: 600; }
@@ -80,13 +164,18 @@
         body.dark-mode .nav-item.nav-danger, body.dark-mode .nav-item.nav-undo { background-color: #4a1510; border-color: #962d22; color: #ff6b6b; }
         .nav-item.nav-danger:hover, .nav-item.nav-undo:hover { background-color: #c0392b; color: white; }
 
+        /* Admin only helper */
+        .admin-only { display: none !important; }
+        body.is-admin .admin-only { display: flex !important; }
+        body.is-admin button.admin-only, body.is-admin span.admin-only { display: inline-flex !important; }
+
         .container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
-        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-top: 5px solid var(--primary-red); border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-top: 5px solid var(--primary-red); border-radius: 8px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
         .card h2 { color: var(--primary-red); margin-bottom: 15px; font-size: 1.5rem; border-bottom: 2px solid var(--light-red); padding-bottom: 8px; display: flex; align-items: center; gap: 10px; }
         .grid-7 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
         .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
 
-        label { font-size: 0.8rem; font-weight: bold; color: var(--dark-red); display: block; margin-top: 6px; }
+        label { font-size: 0.8rem; font-weight: bold; color: var(--primary-red); display: block; margin-top: 6px; }
         select { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.9rem; margin-top: 2px; background: var(--bg-white); color: var(--text-color); }
 
         .auto-expand { width: 100%; min-height: 42px; resize: none; overflow: hidden; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.88rem; line-height: 1.4; padding: 6px 8px; margin-top: 2px; background: transparent; color: var(--text-color); box-sizing: border-box; transition: border-color 0.2s, background-color 0.2s; display: block; }
@@ -109,7 +198,7 @@
         .meal-table-wrapper { overflow-x: auto; }
         .meal-table { width: 100%; border-collapse: collapse; min-width: 800px; }
         .meal-table th, .meal-table td { border: 1px solid var(--border-color); padding: 0; vertical-align: top; position: relative; }
-        .meal-table th { background-color: var(--light-red); color: var(--dark-red); text-align: center; font-size: 0.95rem; padding: 8px 6px; }
+        .meal-table th { background-color: var(--light-red); color: var(--primary-red); text-align: center; font-size: 0.95rem; padding: 8px 6px; }
         .meal-table td.meal-type-header { background-color: var(--light-red); color: var(--primary-red); font-weight: bold; text-align: center; vertical-align: middle; width: 100px; padding: 6px; }
         .meal-cell-container { display: flex; flex-direction: column; height: 100%; justify-content: space-between; }
 
@@ -134,7 +223,7 @@
 
         .table-custom { width: 100%; border-collapse: collapse; margin-top: 10px; }
         .table-custom th, .table-custom td { border: 1px solid var(--border-color); padding: 0; text-align: left; vertical-align: middle; }
-        .table-custom th { background-color: var(--light-red); color: var(--dark-red); padding: 8px 6px; }
+        .table-custom th { background-color: var(--light-red); color: var(--primary-red); padding: 8px 6px; }
         .table-custom textarea.auto-expand, .meal-table textarea.auto-expand { border: none; border-radius: 0; background: transparent; margin: 0; padding: 8px; width: 100%; min-height: 42px; box-shadow: none; display: block; }
 
         textarea.auto-expand.tag-math { background-color: rgba(231, 76, 60, 0.25) !important; }
@@ -158,11 +247,11 @@
 
         .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
-        .calendar-day-head { font-weight: bold; background: var(--light-red); color: var(--dark-red); padding: 5px 0; }
+        .calendar-day-head { font-weight: bold; background: var(--light-red); color: var(--primary-red); padding: 5px 0; }
         .calendar-day { border: 1px solid var(--border-color); min-height: 80px; padding: 5px; text-align: left; background: var(--card-bg); vertical-align: top; }
         .calendar-day .date-num { font-weight: bold; font-size: 0.8rem; color: var(--primary-red); margin-bottom: 4px; }
 
-        /* Activity Log Side Panel Styles */
+        /* Activity Log Side Panel */
         .log-panel {
             position: fixed; top: 0; right: -360px; width: 350px; height: 100vh;
             background: var(--card-bg); border-left: 2px solid var(--primary-red);
@@ -195,7 +284,7 @@
         .log-item .log-time { font-size: 0.72rem; opacity: 0.6; margin-top: 4px; display: block; }
         .log-footer { padding: 10px 15px; border-top: 1px solid var(--border-color); text-align: right; }
 
-        /* Tutorial Styles */
+        /* Tutorial Overlay */
         .tutorial-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; display: none; pointer-events: auto; }
         .tutorial-spotlight { position: fixed; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7); border-radius: 8px; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); pointer-events: none; z-index: 1000000; }
         .tutorial-popover { position: fixed; background: var(--card-bg, #ffffff); color: var(--text-color, #333333); padding: 18px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); width: 340px; z-index: 1000001; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); border: 2px solid var(--primary-red, #c0392b); }
@@ -215,12 +304,24 @@
 </head>
 <body>
 
+<!-- Guest Login View -->
+<div class="guest-login-overlay">
+    <div class="guest-login-card">
+        <h1><i class="fa-solid fa-calendar-check"></i> Olivet Scheduler</h1>
+        <button class="guest-login-btn" onclick="handleGoogleLogin()">
+            <i class="fa-brands fa-google"></i> Sign in with Google
+        </button>
+    </div>
+</div>
+
+<div class="main-app-content">
 <header>
     <h1><i class="fa-solid fa-calendar-check" style="font-size: 1.8rem;"></i> Olivet Scheduler</h1>
     <div class="header-controls">
         <div id="userBadge" class="user-profile-badge" style="display: none;">
             <i class="fa-solid fa-circle-user"></i>
             <span id="userNicknameSpan">Guest</span>
+            <span id="adminBadge" class="admin-badge admin-only">ADMIN</span>
         </div>
         <button class="login-btn" id="loginBtn" onclick="handleGoogleLogin()">
             <i class="fa-solid fa-right-to-bracket" id="loginIcon"></i> <span id="loginBtnText">Login</span>
@@ -241,10 +342,10 @@
         <span style="font-size: 0.8rem; opacity: 0.8;">Recent History</span>
     </div>
     <div class="log-body" id="logContainer">
-        <!-- Log items dynamically inserted here -->
+        <!-- Logs -->
     </div>
     <div class="log-footer">
-        <button class="btn btn-danger" style="font-size: 0.75rem;" onclick="clearLogs()">Clear Logs</button>
+        <button class="btn btn-danger admin-only" style="font-size: 0.75rem;" onclick="clearLogs()">Clear Logs</button>
     </div>
 </div>
 
@@ -270,10 +371,10 @@
 
     <div class="nav-row nav-row-actions">
         <span class="nav-item nav-danger" onclick="startTutorial()"><i class="fa-solid fa-circle-question"></i> Tutorial</span>
-        <span class="nav-item nav-danger" onclick="resetAllData()"><i class="fa-solid fa-trash"></i> Reset All</span>
-        <span class="nav-item nav-undo" onclick="undoResetData()"><i class="fa-solid fa-rotate-left"></i> Undo Reset</span>
-        <span class="nav-item nav-action" onclick="exportData()"><i class="fa-solid fa-download"></i> Backup Data</span>
-        <span class="nav-item nav-action" onclick="document.getElementById('importFileInput').click()"><i class="fa-solid fa-upload"></i> Restore Data</span>
+        <span class="nav-item nav-danger admin-only" onclick="resetAllData()"><i class="fa-solid fa-trash"></i> Reset All</span>
+        <span class="nav-item nav-undo admin-only" onclick="undoResetData()"><i class="fa-solid fa-rotate-left"></i> Undo Reset</span>
+        <span class="nav-item nav-action admin-only" onclick="exportData()"><i class="fa-solid fa-download"></i> Backup Data</span>
+        <span class="nav-item nav-action admin-only" onclick="document.getElementById('importFileInput').click()"><i class="fa-solid fa-upload"></i> Restore Data</span>
         <span class="nav-item nav-action" onclick="window.print()"><i class="fa-solid fa-print"></i> Print</span>
     </div>
 
@@ -422,6 +523,7 @@
     </div>
 
 </div>
+</div>
 
 <div id="tutorialOverlay" class="tutorial-overlay">
     <div id="tutorialSpotlight" class="tutorial-spotlight"></div>
@@ -445,7 +547,6 @@
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
-    // Firebase Configuration
     const firebaseConfig = {
         apiKey: "AIzaSyDdaoNHitc3Z3vSrhyv0gmtfMsEACk4vGc",
         authDomain: "olivet-scheduler.firebaseapp.com",
@@ -456,12 +557,12 @@
         measurementId: "G-QEN7Y7E844"
     };
 
-    // Initialize Firebase, Firestore, and Auth
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    // Global Firebase Helper Functions
+    const ADMIN_EMAIL = "mnoh@olivetacademy.com";
+
     window.dbSaveData = async function(key, data) {
         try {
             await setDoc(doc(db, "schedulerData", key), { value: data }, { merge: true });
@@ -480,7 +581,6 @@
         });
     };
 
-    // Real Google Popup Authentication with @olivetacademy.org Domain Lock
     window.handleGoogleLogin = async function() {
         const currentUser = window.getData ? window.getData('auth_user', null) : null;
         if (currentUser && currentUser.nickname) {
@@ -500,20 +600,13 @@
 
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({
-            hd: "olivetacademy.org",
             prompt: "select_account"
         });
 
         try {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
-            const email = user.email || '';
-
-            if (!email.toLowerCase().endsWith('@olivetacademy.org')) {
-                await signOut(auth);
-                alert('Access Restricted: Only @olivetacademy.org Google accounts are allowed to log in.');
-                return;
-            }
+            const email = (user.email || '').toLowerCase();
 
             const nickname = email.split('@')[0];
             const userData = { email: email, nickname: nickname, photoURL: user.photoURL || '' };
@@ -534,21 +627,24 @@
         }
     };
 
-    // Auth State Change Listener
     onAuthStateChanged(auth, (user) => {
-        if (user && user.email && user.email.toLowerCase().endsWith('@olivetacademy.org')) {
-            const nickname = user.email.split('@')[0];
-            const userData = { email: user.email, nickname: nickname, photoURL: user.photoURL || '' };
+        if (user && user.email) {
+            const email = user.email.toLowerCase();
+            const nickname = email.split('@')[0];
+            const userData = { email: email, nickname: nickname, photoURL: user.photoURL || '' };
             if (window.saveData) window.saveData('auth_user', userData);
             localStorage.setItem('olivet_user_id', nickname);
             if (window.initAuthUI) window.initAuthUI();
-        } else if (user) {
-            signOut(auth);
+        } else {
+            localStorage.removeItem('olivet_auth_user');
+            if (window.initAuthUI) window.initAuthUI();
         }
     });
 </script>
 
 <script>
+    const ADMIN_EMAIL = "mnoh@olivetacademy.com";
+
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const weekendDays = ['Saturday', 'Sunday'];
     const mealTypes = [
@@ -607,7 +703,38 @@
         }
     }
 
-    /* ACTIVITY LOGGING SYSTEM */
+    function isAdminUser() {
+        const currentUser = getData('auth_user', null);
+        return (currentUser && currentUser.email && currentUser.email.toLowerCase() === ADMIN_EMAIL);
+    }
+
+    function initAuthUI() {
+        const currentUser = getData('auth_user', null);
+        const loginBtnText = document.getElementById('loginBtnText');
+        const loginIcon = document.getElementById('loginIcon');
+        const userBadge = document.getElementById('userBadge');
+        const userNicknameSpan = document.getElementById('userNicknameSpan');
+
+        if (currentUser && currentUser.nickname) {
+            document.body.classList.add('is-logged-in');
+            loginBtnText.textContent = 'Logout';
+            loginIcon.className = 'fa-solid fa-right-from-bracket';
+            userBadge.style.display = 'flex';
+            userNicknameSpan.textContent = currentUser.nickname;
+        } else {
+            document.body.classList.remove('is-logged-in');
+            loginBtnText.textContent = 'Login with Google';
+            loginIcon.className = 'fa-brands fa-google';
+            userBadge.style.display = 'none';
+        }
+
+        if (isAdminUser()) {
+            document.body.classList.add('is-admin');
+        } else {
+            document.body.classList.remove('is-admin');
+        }
+    }
+
     function addLog(actionDescription) {
         const currentUser = getData('auth_user', { nickname: 'Guest' });
         const displayUser = currentUser.nickname || 'Guest';
@@ -658,28 +785,10 @@
     }
 
     function clearLogs() {
+        if (!isAdminUser()) return;
         if (confirm('Are you sure you want to clear all activity logs?')) {
             saveData('activity_logs', []);
             renderLogs();
-        }
-    }
-
-    function initAuthUI() {
-        const currentUser = getData('auth_user', null);
-        const loginBtnText = document.getElementById('loginBtnText');
-        const loginIcon = document.getElementById('loginIcon');
-        const userBadge = document.getElementById('userBadge');
-        const userNicknameSpan = document.getElementById('userNicknameSpan');
-
-        if (currentUser && currentUser.nickname) {
-            loginBtnText.textContent = 'Logout';
-            loginIcon.className = 'fa-solid fa-right-from-bracket';
-            userBadge.style.display = 'flex';
-            userNicknameSpan.textContent = currentUser.nickname;
-        } else {
-            loginBtnText.textContent = 'Login with Google';
-            loginIcon.className = 'fa-brands fa-google';
-            userBadge.style.display = 'none';
         }
     }
 
@@ -1196,6 +1305,7 @@
     }
 
     function exportData() {
+        if (!isAdminUser()) return;
         const exportObj = {};
         const keys = Object.keys(localStorage).filter(k => k.startsWith('olivet_'));
         keys.forEach(key => exportObj[key] = localStorage.getItem(key));
@@ -1212,6 +1322,7 @@
     }
 
     function importData(event) {
+        if (!isAdminUser()) return;
         const file = event.target.files[0];
         if (!file) return;
 
@@ -1239,6 +1350,7 @@
     }
 
     function resetAllData() {
+        if (!isAdminUser()) return;
         if (confirm('Are you sure you want to delete ALL scheduler data? This cannot be undone.')) {
             const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('olivet_') && k !== 'olivet_undo_backup');
             const backupObj = {};
@@ -1256,6 +1368,7 @@
     }
 
     function undoResetData() {
+        if (!isAdminUser()) return;
         const undoData = localStorage.getItem('olivet_undo_backup');
         if (!undoData) {
             alert('No backup found to restore.');
@@ -1276,226 +1389,203 @@
         }
     }
 
-    /* TUTORIAL SYSTEM INTERACTIVE CODE */
+    // ================= TUTORIAL DATA & STATE =================
     const tutorialSteps = [
         {
-            title: "Welcome to Olivet Scheduler!",
-            text: "This guide will walk you through setting up and customizing your weekly scheduler.",
-            element: null,
-            inputPlaceholder: null
+            target: 'header',
+            title: 'Welcome to Olivet Scheduler!',
+            text: 'Here you can toggle Dark Mode and manage your daily academic schedules smoothly.'
         },
         {
-            title: "1. Meal Menu & Sticker Ratings",
-            text: "Enter your menu for Breakfast, Lunch, and Dinner. Rate meals using interactive stickers!",
-            element: "#sec-meals",
-            inputPlaceholder: "Type a sample meal menu (e.g., Pancakes & Orange Juice)...",
-            onNext: (value) => {
-                if (value && value.trim() !== "") {
-                    const meals = getData('meals', {});
-                    if (!meals['Monday']) meals['Monday'] = { b: '', l: '', d: '' };
-                    meals['Monday']['b'] = value;
-                    saveData('meals', meals);
-                    initMeals();
-                }
-            }
+            target: '.quick-nav .nav-row:first-child',
+            title: 'Quick Navigation',
+            text: 'Jump directly to any section using these quick link buttons.'
         },
         {
-            title: "2. Weekend Cooking Team",
-            text: "Assign cooking duties for Saturday and Sunday Lunch and Dinner.",
-            element: "#sec-cooking",
-            inputPlaceholder: "Type student name for Saturday Lunch...",
-            onNext: (value) => {
-                if (value && value.trim() !== "") {
-                    const cooking = getData('cooking', {});
-                    if (!cooking['Saturday']) cooking['Saturday'] = { l: '', d: '' };
-                    cooking['Saturday']['l'] = value;
-                    saveData('cooking', cooking);
-                    initCooking();
-                }
-            }
+            target: '.nav-row-actions',
+            title: 'Quick Actions',
+            text: 'Access tutorials, print functions, and administrator management options here.'
         },
         {
-            title: "3. Cafeteria Cleaning Team",
-            text: "Assign students responsible for daily cafeteria cleanup.",
-            element: "#sec-cafeteria-cleaning",
-            inputPlaceholder: "Type student name for Monday cleaning...",
-            onNext: (value) => {
-                if (value && value.trim() !== "") {
-                    const cleaning = getData('cleaning', {});
-                    cleaning['Monday'] = value;
-                    saveData('cleaning', cleaning);
-                    initCleaning();
-                }
-            }
+            target: '#sec-meals',
+            title: 'Weekly Meal Menu & Ratings',
+            text: 'Check the weekly meal menu. Try clicking on any emoji sticker (😋, 😐, 😭) below a menu item to submit your vote!'
         },
         {
-            title: "4. Dormitory Cleaning Teams",
-            text: "Separate cleaning schedules for Girls' and Boys' dormitories.",
-            element: "#sec-dorm-cleaning",
-            inputPlaceholder: "Type a cleaning area (e.g., Main Hallway)...",
-            onNext: (value) => {
-                if (value && value.trim() !== "") {
-                    const data = getData('girlsDormData', []);
-                    if (data.length > 0) data[0].area = value;
-                    else data.push({ area: value, person: '' });
-                    saveData('girlsDormData', data);
-                    renderDormTable('girlsDormTable', 'girlsDormData');
-                }
-            }
+            target: '#sec-cooking',
+            title: 'Weekend Cooking & Cleaning',
+            text: 'Record cooking teams and cleaning assignments. You can enter assigned students, duties, and specific schedules here.'
         },
         {
-            title: "5. Grade Class Schedule",
-            text: "Select your grade to manage daily period times and subjects. Subjects automatically highlight based on keywords!",
-            element: "#sec-schedule",
-            inputPlaceholder: "Type a class name (e.g., Math, Science, PE, Chapel)...",
-            onNext: (value) => {
-                if (value && value.trim() !== "") {
-                    const grade = document.getElementById('gradeSelect').value;
-                    const key = 'schedule_g' + grade;
-                    let schedule = getData(key, defaultSchedule);
-                    if (schedule.length > 0) schedule[0].name = value;
-                    saveData(key, schedule);
-                    loadScheduleAndSideNotes();
-                }
-            }
+            target: '.schedule-main',
+            title: 'Class Schedule & Swap Feature',
+            text: 'Select your grade to edit class periods. Click the red Swap button (🔄) on any row, then click another row to swap their order instantly!'
         },
         {
-            title: "6. Sticky Notes & Reminders",
-            text: "Keep track of supplies, announcements, deadlines, and tasks right alongside your class schedule.",
-            element: ".schedule-side",
-            inputPlaceholder: "Type a quick reminder for items to bring tomorrow...",
-            onNext: (value) => {
-                if (value && value.trim() !== "") {
-                    const grade = document.getElementById('gradeSelect').value;
-                    saveData(`side_sideBring_g${grade}`, value);
-                    loadScheduleAndSideNotes();
-                }
-            }
+            target: '.schedule-side',
+            title: 'Interactive Sticky Notes',
+            text: 'Use these notes to record items to bring tomorrow, school announcements, upcoming project deadlines, and personal to-do lists.'
         },
         {
-            title: "7. School Calendar",
-            text: "View and log upcoming school events for any day of the month.",
-            element: "#sec-calendar",
-            inputPlaceholder: "Type a calendar note (e.g., Science Fair at 2 PM)...",
-            onNext: (value) => {
-                if (value && value.trim() !== "") {
-                    const year = currentCalendarDate.getFullYear();
-                    const month = currentCalendarDate.getMonth();
-                    saveCalendarEvent(year, month, 1, value);
-                    renderCalendar();
-                }
-            }
+            target: '#sec-calendar',
+            title: 'School Calendar',
+            text: 'Check and manage all school events and monthly schedules here.'
         },
         {
-            title: "8. Activity Log",
-            text: "Track all recent updates, schedule changes, and sticker votes in real-time.",
-            element: "#logPanel",
-            inputPlaceholder: null
+            target: 'header',
+            title: 'Blessing & Final Step',
+            text: 'This is a space for all of us to record and share our schedules together. We hope this makes checking your schedules much more convenient and meaningful! Amen?',
+            isFinalAmen: true
         }
     ];
 
     let currentTutorialStep = 0;
+    let amenSkipState = 0;
 
     function startTutorial() {
         currentTutorialStep = 0;
+        amenSkipState = 0;
+        document.body.style.overflow = 'hidden'; 
         document.getElementById('tutorialOverlay').style.display = 'block';
         showTutorialStep(currentTutorialStep);
-        addLog('Started Tutorial');
     }
 
     function showTutorialStep(stepIdx) {
         const step = tutorialSteps[stepIdx];
-        const spotlight = document.getElementById('tutorialSpotlight');
-        const popover = document.getElementById('tutorialPopover');
-        const tutTitle = document.getElementById('tutTitle');
-        const tutText = document.getElementById('tutText');
-        const tutInputArea = document.getElementById('tutInputArea');
-        const tutStepCount = document.getElementById('tutStepCount');
-        const nextBtn = document.getElementById('tutNextBtn');
+        const targetEl = document.querySelector(step.target);
+        
+        if (!targetEl) return;
 
-        tutTitle.innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${escapeHtml(step.title)}`;
-        tutText.textContent = step.text;
-        tutStepCount.textContent = `${stepIdx + 1} / ${tutorialSteps.length}`;
-        nextBtn.textContent = (stepIdx === tutorialSteps.length - 1) ? 'Finish' : 'Next';
+        const isScheduleStep = (step.target === '.schedule-main');
+        const elementRect = targetEl.getBoundingClientRect();
+        const absoluteElementTop = elementRect.top + window.pageYOffset;
+        
+        const scrollRatio = isScheduleStep ? 0.15 : 0.25;
+        const middleOffset = absoluteElementTop - (window.innerHeight * scrollRatio);
 
-        if (step.inputPlaceholder) {
-            tutInputArea.innerHTML = `
-                <div class="tutorial-input-group">
-                    <input type="text" id="tutInput" class="tutorial-input" placeholder="${escapeHtml(step.inputPlaceholder)}">
-                </div>
-            `;
-            setTimeout(() => {
-                const inp = document.getElementById('tutInput');
-                if (inp) inp.focus();
-            }, 100);
-        } else {
-            tutInputArea.innerHTML = '';
-        }
+        window.scrollTo({
+            top: Math.max(0, middleOffset),
+            behavior: 'smooth'
+        });
 
-        if (step.element) {
-            const el = document.querySelector(step.element);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                const rect = el.getBoundingClientRect();
-                
-                spotlight.style.left = `${rect.left - 8}px`;
-                spotlight.style.top = `${rect.top - 8}px`;
-                spotlight.style.width = `${rect.width + 16}px`;
-                spotlight.style.height = `${rect.height + 16}px`;
-                spotlight.style.display = 'block';
+        setTimeout(() => {
+            const rect = targetEl.getBoundingClientRect();
+            const spotlight = document.getElementById('tutorialSpotlight');
+            const popover = document.getElementById('tutorialPopover');
+            const inputArea = document.getElementById('tutInputArea');
+            const skipBtn = document.getElementById('tutSkipBtn');
 
-                const popoverHeight = 220;
-                let topPos = rect.bottom + 15;
-                if (topPos + popoverHeight > window.innerHeight) {
-                    topPos = Math.max(10, rect.top - popoverHeight - 15);
-                }
+            const padding = 10;
+            spotlight.style.top = (rect.top - padding) + 'px';
+            spotlight.style.left = (rect.left - padding) + 'px';
+            spotlight.style.width = (rect.width + padding * 2) + 'px';
+            spotlight.style.height = (rect.height + padding * 2) + 'px';
 
-                let leftPos = rect.left + (rect.width / 2) - 170;
-                leftPos = Math.max(20, Math.min(window.innerWidth - 360, leftPos));
+            document.getElementById('tutTitle').innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${step.title}`;
+            document.getElementById('tutText').textContent = step.text;
+            document.getElementById('tutStepCount').textContent = `${stepIdx + 1} / ${tutorialSteps.length}`;
 
-                popover.style.top = `${topPos}px`;
-                popover.style.left = `${leftPos}px`;
+            if (skipBtn) skipBtn.textContent = 'Skip';
+
+            if (step.isFinalAmen) {
+                amenSkipState = 0;
+                inputArea.innerHTML = `
+                    <div class="tutorial-input-group">
+                        <input type="text" id="amenInput" class="tutorial-input" placeholder="Amen!" onkeyup="handleAmenKey(event)" autofocus />
+                    </div>
+                `;
+                const nextBtn = document.getElementById('tutNextBtn');
+                nextBtn.textContent = 'Amen!';
+                nextBtn.onclick = checkAmenAndFinish;
             } else {
-                positionPopoverCenter();
+                inputArea.innerHTML = '';
+                const nextBtn = document.getElementById('tutNextBtn');
+                nextBtn.textContent = (stepIdx === tutorialSteps.length - 1) ? 'Done' : 'Next';
+                nextBtn.onclick = nextTutorialStep;
+            }
+
+            const popoverWidth = 340;
+            const popoverHeight = popover.offsetHeight || 250;
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            let popLeft = rect.left + (rect.width / 2) - (popoverWidth / 2);
+            popLeft = Math.max(15, Math.min(popLeft, viewportWidth - popoverWidth - 15));
+
+            let popTop;
+
+            if (isScheduleStep) {
+                popTop = rect.top - popoverHeight - 20;
+                if (popTop < 20) {
+                    popTop = Math.max(20, rect.top + 20); 
+                }
+            } else {
+                const spaceBelow = viewportHeight - rect.bottom;
+                const spaceAbove = rect.top;
+
+                if (spaceBelow >= popoverHeight + 20 && rect.top < viewportHeight * 0.5) {
+                    popTop = rect.bottom + 15;
+                } else if (spaceAbove >= popoverHeight + 20) {
+                    popTop = rect.top - popoverHeight - 15;
+                } else {
+                    popTop = Math.max(20, (viewportHeight - popoverHeight) / 2);
+                }
+            }
+
+            popTop = Math.max(20, Math.min(popTop, viewportHeight - popoverHeight - 20));
+
+            popover.style.top = popTop + 'px';
+            popover.style.left = popLeft + 'px';
+            
+            if (step.isFinalAmen) {
+                const amenIn = document.getElementById('amenInput');
+                if (amenIn) amenIn.focus();
+            }
+        }, 400);
+    }
+
+    function handleSkipClick() {
+        const step = tutorialSteps[currentTutorialStep];
+        
+        if (step && step.isFinalAmen) {
+            const skipBtn = document.getElementById('tutSkipBtn');
+            if (amenSkipState === 0) {
+                amenSkipState = 1;
+                if (skipBtn) skipBtn.textContent = 'Are you sure?';
+            } else if (amenSkipState === 1) {
+                amenSkipState = 2;
+                if (skipBtn) skipBtn.textContent = 'Amen!';
+            } else if (amenSkipState === 2) {
+                endTutorial();
             }
         } else {
-            spotlight.style.display = 'none';
-            positionPopoverCenter();
+            endTutorial();
         }
     }
 
-    function positionPopoverCenter() {
-        const popover = document.getElementById('tutorialPopover');
-        popover.style.top = '50%';
-        popover.style.left = '50%';
-        popover.style.transform = 'translate(-50%, -50%)';
+    function handleAmenKey(event) {
+        if (event.key === 'Enter') {
+            checkAmenAndFinish();
+        }
+    }
+
+    function checkAmenAndFinish() {
+        endTutorial();
     }
 
     function nextTutorialStep() {
-        const step = tutorialSteps[currentTutorialStep];
-        const inputElem = document.getElementById('tutInput');
-        
-        if (step && step.onNext && inputElem) {
-            step.onNext(inputElem.value);
-        }
-
         currentTutorialStep++;
         if (currentTutorialStep >= tutorialSteps.length) {
             endTutorial();
         } else {
-            const popover = document.getElementById('tutorialPopover');
-            popover.style.transform = 'none';
             showTutorialStep(currentTutorialStep);
         }
     }
 
-    function handleSkipClick() {
-        endTutorial();
-    }
-
     function endTutorial() {
+        document.body.style.overflow = '';
         document.getElementById('tutorialOverlay').style.display = 'none';
-        addLog('Completed or Skipped Tutorial');
+        saveData('tutorial_completed', true);
     }
 
     window.addEventListener('DOMContentLoaded', () => {
