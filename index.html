@@ -639,6 +639,11 @@
     };
 
     function refreshUIByKey(key) {
+        if (key === 'activity_logs') {
+            if (window.renderLogs) window.renderLogs();
+            return;
+        }
+
         if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
 
         if (key === 'meals' || key === 'meal_sticker_votes') {
@@ -649,8 +654,6 @@
             if (window.initCleaning) window.initCleaning();
         } else if (key === 'girlsDormData' || key === 'boysDormData') {
             if (window.initDormTables) window.initDormTables();
-        } else if (key === 'activity_logs') {
-            if (window.renderLogs) window.renderLogs();
         }
     }
 
@@ -1407,23 +1410,30 @@
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = async function(e) {
             try {
                 const importedObj = JSON.parse(e.target.result);
                 if (typeof importedObj !== 'object' || importedObj === null) throw new Error("Invalid object");
 
                 if (confirm('Importing this file will overwrite existing data. Continue?')) {
-                    Object.keys(importedObj).forEach(key => {
+                    const keys = Object.keys(importedObj);
+                    for (let key of keys) {
                         if (key.startsWith('olivet_') && typeof importedObj[key] === 'string') {
                             localStorage.setItem(key, importedObj[key]);
                             const cleanKey = key.replace('olivet_', '');
+                            let parsedVal = null;
+                            try {
+                                parsedVal = JSON.parse(importedObj[key]);
+                            } catch (err) {
+                                parsedVal = importedObj[key];
+                            }
                             if (window.dbSaveData) {
-                                window.dbSaveData(cleanKey, JSON.parse(importedObj[key]));
+                                await window.dbSaveData(cleanKey, parsedVal);
                             }
                         }
-                    });
+                    }
                     addLog('Restored data from backup file');
-                    alert('Data successfully restored!');
+                    alert('Data successfully restored & synchronized!');
                     location.reload();
                 }
             } catch (err) {
@@ -1469,8 +1479,10 @@
                 Object.keys(parsed).forEach(key => {
                     localStorage.setItem(key, parsed[key]);
                     const cleanKey = key.replace('olivet_', '');
+                    let parsedVal = null;
+                    try { parsedVal = JSON.parse(parsed[key]); } catch (e) { parsedVal = parsed[key]; }
                     if (window.dbSaveData) {
-                        window.dbSaveData(cleanKey, JSON.parse(parsed[key]));
+                        window.dbSaveData(cleanKey, parsedVal);
                     }
                 });
                 localStorage.removeItem('olivet_undo_backup');
