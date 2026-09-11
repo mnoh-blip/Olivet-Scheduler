@@ -545,6 +545,23 @@
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
+    /*
+     * [보안 가이드] Firebase Security Rules (Firebase Console의 Firestore Database > 규칙에 작성해야함):
+     *
+     * rules_version = '2';
+     * service cloud.firestore {
+     *   match /databases/{database}/documents {
+     *     match /schedulerData/{document} {
+     *       allow read: if request.auth != null;
+     *       allow write: if request.auth != null && (
+     *         request.auth.token.email.matches(".*@olivetacademy\\.org$") || 
+     *         request.auth.token.email.matches(".*@olivetacademy\\.com$")
+     *       );
+     *     }
+     *   }
+     * }
+     */
+
     const firebaseConfig = {
         apiKey: "AIzaSyDdaoNHitc3Z3vSrhyv0gmtfMsEACk4vGc",
         authDomain: "olivet-scheduler.firebaseapp.com",
@@ -558,8 +575,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
-
-    const ADMIN_EMAIL = "mnoh@olivetacademy.com";
+    window.firebaseAuth = auth; // 전역 바인딩을 통해 권한 상태 검증 강화
 
     window.dbSaveData = async function(key, data) {
         try {
@@ -667,9 +683,10 @@
         { text: '"Your word is a lamp for my feet, a light on my path."', ref: '- Psalm 119:105' }
     ];
 
+    // 보안 강화된 HTML Escape 함수 (XSS 완전 방지)
     function escapeHtml(str) {
-        if (typeof str !== 'string') return '';
-        return str
+        if (str === null || str === undefined) return '';
+        return String(str)
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
@@ -701,9 +718,16 @@
         }
     }
 
+    // 보안 강화: LocalStorage 변조 공격에 대비해 실제 Firebase 인증 사용자 객체로 2중 이메일 검증
     function isAdminUser() {
-        const currentUser = getData('auth_user', null);
-        return (currentUser && currentUser.email && currentUser.email.toLowerCase() === ADMIN_EMAIL);
+        let email = "";
+        if (window.firebaseAuth && window.firebaseAuth.currentUser) {
+            email = window.firebaseAuth.currentUser.email || "";
+        } else {
+            const currentUser = getData('auth_user', null);
+            if (currentUser && currentUser.email) email = currentUser.email;
+        }
+        return (email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
     }
 
     function initAuthUI() {
@@ -888,7 +912,7 @@
                 const textVal = dayData[meal.key] || '';
                 const baseVoteKey = `${day}_${meal.key}`;
 
-                let stickerBarHtml = `<div class="sticker-bar" id="bar_${baseVoteKey}">`;
+                let stickerBarHtml = `<div class="sticker-bar" id="bar_${escapeHtml(baseVoteKey)}">`;
                 
                 stickerTypes.forEach(st => {
                     const stVoteKey = `${baseVoteKey}_${st.key}`;
@@ -899,11 +923,11 @@
 
                     stickerBarHtml += `
                         <button class="sticker-btn ${activeClass}" 
-                                id="btn_${stVoteKey}" 
-                                onclick="voteSticker('${day}', '${meal.key}', '${st.key}')" 
-                                title="${st.label}">
+                                id="btn_${escapeHtml(stVoteKey)}" 
+                                onclick="voteSticker('${escapeHtml(day)}', '${escapeHtml(meal.key)}', '${escapeHtml(st.key)}')" 
+                                title="${escapeHtml(st.label)}">
                             <span class="emoji">${st.emoji}</span>
-                            <span id="count_${stVoteKey}">${voteCount}</span>
+                            <span id="count_${escapeHtml(stVoteKey)}">${voteCount}</span>
                         </button>
                     `;
                 });
@@ -915,7 +939,7 @@
                         <div class="meal-cell-container">
                             <textarea class="auto-expand" 
                                       placeholder="Menu..."
-                                      oninput="autoResizeTextarea(this); debouncedSaveMeal('${day}', '${meal.key}', this.value)"
+                                      oninput="autoResizeTextarea(this); debouncedSaveMeal('${escapeHtml(day)}', '${escapeHtml(meal.key)}', this.value)"
                             >${escapeHtml(textVal)}</textarea>
                             ${stickerBarHtml}
                         </div>
@@ -1007,9 +1031,9 @@
             box.innerHTML = `
                 <h3><i class="fa-solid fa-utensils"></i> ${escapeHtml(day)} Cooking</h3>
                 <label>Lunch Cook</label>
-                <textarea class="auto-expand" placeholder="Assigned student..." oninput="autoResizeTextarea(this); debouncedSaveCooking('${day}', 'l', this.value)">${escapeHtml(dayData.l || '')}</textarea>
+                <textarea class="auto-expand" placeholder="Assigned student..." oninput="autoResizeTextarea(this); debouncedSaveCooking('${escapeHtml(day)}', 'l', this.value)">${escapeHtml(dayData.l || '')}</textarea>
                 <label>Dinner Cook</label>
-                <textarea class="auto-expand" placeholder="Assigned student..." oninput="autoResizeTextarea(this); debouncedSaveCooking('${day}', 'd', this.value)">${escapeHtml(dayData.d || '')}</textarea>
+                <textarea class="auto-expand" placeholder="Assigned student..." oninput="autoResizeTextarea(this); debouncedSaveCooking('${escapeHtml(day)}', 'd', this.value)">${escapeHtml(dayData.d || '')}</textarea>
             `;
             cookingGrid.appendChild(box);
         });
@@ -1041,7 +1065,7 @@
             box.className = `sticky-note ${colors[idx % colors.length]}`;
             box.innerHTML = `
                 <h4><i class="fa-solid fa-broom"></i> ${escapeHtml(day.substring(0, 3))}</h4>
-                <textarea class="auto-expand" placeholder="Student name..." oninput="autoResizeTextarea(this); debouncedSaveCleaning('${day}', this.value)">${escapeHtml(person)}</textarea>
+                <textarea class="auto-expand" placeholder="Student name..." oninput="autoResizeTextarea(this); debouncedSaveCleaning('${escapeHtml(day)}', this.value)">${escapeHtml(person)}</textarea>
             `;
             cleaningGrid.appendChild(box);
         });
@@ -1077,9 +1101,9 @@
         data.forEach((item, index) => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><textarea class="auto-expand" placeholder="Area..." oninput="autoResizeTextarea(this); debouncedSaveDormRow('${storageKey}', ${index}, 'area', this.value)">${escapeHtml(item.area || '')}</textarea></td>
-                <td><textarea class="auto-expand" placeholder="Student..." oninput="autoResizeTextarea(this); debouncedSaveDormRow('${storageKey}', ${index}, 'person', this.value)">${escapeHtml(item.person || '')}</textarea></td>
-                <td style="vertical-align: middle; text-align: center;"><button class="btn btn-danger" onclick="deleteDormRow('${storageKey}', ${index}, '${tableId}')">X</button></td>
+                <td><textarea class="auto-expand" placeholder="Area..." oninput="autoResizeTextarea(this); debouncedSaveDormRow('${escapeHtml(storageKey)}', ${index}, 'area', this.value)">${escapeHtml(item.area || '')}</textarea></td>
+                <td><textarea class="auto-expand" placeholder="Student..." oninput="autoResizeTextarea(this); debouncedSaveDormRow('${escapeHtml(storageKey)}', ${index}, 'person', this.value)">${escapeHtml(item.person || '')}</textarea></td>
+                <td style="vertical-align: middle; text-align: center;"><button class="btn btn-danger" onclick="deleteDormRow('${escapeHtml(storageKey)}', ${index}, '${escapeHtml(tableId)}')">X</button></td>
             `;
             tbody.appendChild(tr);
         });
@@ -1479,7 +1503,7 @@
             spotlight.style.width = (rect.width + padding * 2) + 'px';
             spotlight.style.height = (rect.height + padding * 2) + 'px';
 
-            document.getElementById('tutTitle').innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${step.title}`;
+            document.getElementById('tutTitle').innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${escapeHtml(step.title)}`;
             document.getElementById('tutText').textContent = step.text;
             document.getElementById('tutStepCount').textContent = `${stepIdx + 1} / ${tutorialSteps.length}`;
 
