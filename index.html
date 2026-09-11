@@ -339,9 +339,7 @@
         <h3><i class="fa-solid fa-list-check"></i> Activity Log</h3>
         <span style="font-size: 0.8rem; opacity: 0.8;">Recent History</span>
     </div>
-    <div class="log-body" id="logContainer">
-        <!-- Logs -->
-    </div>
+    <div class="log-body" id="logContainer"></div>
     <div class="log-footer">
         <button class="btn btn-danger admin-only" style="font-size: 0.75rem;" onclick="clearLogs()">Clear Logs</button>
     </div>
@@ -578,14 +576,12 @@
         });
     };
 
-    // 실시간 동기화 설정 함수
     window.initRealtimeSync = function() {
         const syncKeys = [
             'meals', 'meal_sticker_votes', 'cooking', 'cleaning',
             'girlsDormData', 'boysDormData', 'activity_logs'
         ];
 
-        // 기본 항목 리스너 등록
         syncKeys.forEach(key => {
             window.dbListenData(key, (remoteVal) => {
                 if (remoteVal !== null) {
@@ -599,7 +595,6 @@
             });
         });
 
-        // 학년별 시간표 & 메모 리스너 등록
         [6, 7, 8, 9, 10, 11, 12].forEach(g => {
             const schedKey = `schedule_g${g}`;
             window.dbListenData(schedKey, (remoteVal) => {
@@ -639,11 +634,6 @@
     };
 
     function refreshUIByKey(key) {
-        if (key === 'activity_logs') {
-            if (window.renderLogs) window.renderLogs();
-            return;
-        }
-
         if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
 
         if (key === 'meals' || key === 'meal_sticker_votes') {
@@ -654,6 +644,8 @@
             if (window.initCleaning) window.initCleaning();
         } else if (key === 'girlsDormData' || key === 'boysDormData') {
             if (window.initDormTables) window.initDormTables();
+        } else if (key === 'activity_logs') {
+            if (window.renderLogs) window.renderLogs();
         }
     }
 
@@ -1410,30 +1402,23 @@
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = async function(e) {
+        reader.onload = function(e) {
             try {
                 const importedObj = JSON.parse(e.target.result);
                 if (typeof importedObj !== 'object' || importedObj === null) throw new Error("Invalid object");
 
                 if (confirm('Importing this file will overwrite existing data. Continue?')) {
-                    const keys = Object.keys(importedObj);
-                    for (let key of keys) {
+                    Object.keys(importedObj).forEach(key => {
                         if (key.startsWith('olivet_') && typeof importedObj[key] === 'string') {
                             localStorage.setItem(key, importedObj[key]);
                             const cleanKey = key.replace('olivet_', '');
-                            let parsedVal = null;
-                            try {
-                                parsedVal = JSON.parse(importedObj[key]);
-                            } catch (err) {
-                                parsedVal = importedObj[key];
-                            }
                             if (window.dbSaveData) {
-                                await window.dbSaveData(cleanKey, parsedVal);
+                                window.dbSaveData(cleanKey, JSON.parse(importedObj[key]));
                             }
                         }
-                    }
+                    });
                     addLog('Restored data from backup file');
-                    alert('Data successfully restored & synchronized!');
+                    alert('Data successfully restored!');
                     location.reload();
                 }
             } catch (err) {
@@ -1479,10 +1464,8 @@
                 Object.keys(parsed).forEach(key => {
                     localStorage.setItem(key, parsed[key]);
                     const cleanKey = key.replace('olivet_', '');
-                    let parsedVal = null;
-                    try { parsedVal = JSON.parse(parsed[key]); } catch (e) { parsedVal = parsed[key]; }
                     if (window.dbSaveData) {
-                        window.dbSaveData(cleanKey, parsedVal);
+                        window.dbSaveData(cleanKey, JSON.parse(parsed[key]));
                     }
                 });
                 localStorage.removeItem('olivet_undo_backup');
@@ -1693,6 +1676,42 @@
         document.getElementById('tutorialOverlay').style.display = 'none';
         saveData('tutorial_completed', true);
     }
+
+    // 글로벌 바인딩
+    window.getData = getData;
+    window.saveData = saveData;
+    window.initMeals = initMeals;
+    window.initCooking = initCooking;
+    window.initCleaning = initCleaning;
+    window.initDormTables = initDormTables;
+    window.loadScheduleAndSideNotes = loadScheduleAndSideNotes;
+    window.renderLogs = renderLogs;
+    window.addLog = addLog;
+    window.initAuthUI = initAuthUI;
+    window.autoResizeTextarea = autoResizeTextarea;
+    window.debouncedSaveMeal = debouncedSaveMeal;
+    window.voteSticker = voteSticker;
+    window.debouncedSaveCooking = debouncedSaveCooking;
+    window.debouncedSaveCleaning = debouncedSaveCleaning;
+    window.debouncedSaveDormRow = debouncedSaveDormRow;
+    window.addDormRow = addDormRow;
+    window.deleteDormRow = deleteDormRow;
+    window.handleSwapClick = handleSwapClick;
+    window.debouncedSaveScheduleItem = debouncedSaveScheduleItem;
+    window.addScheduleRow = addScheduleRow;
+    window.deleteScheduleItem = deleteScheduleItem;
+    window.debouncedSaveSideContent = debouncedSaveSideContent;
+    window.changeMonth = changeMonth;
+    window.debouncedSaveCalendarEvent = debouncedSaveCalendarEvent;
+    window.toggleDarkMode = toggleDarkMode;
+    window.toggleLogPanel = toggleLogPanel;
+    window.clearLogs = clearLogs;
+    window.startTutorial = startTutorial;
+    window.exportData = exportData;
+    window.importData = importData;
+    window.resetAllData = resetAllData;
+    window.undoResetData = undoResetData;
+    window.handleSkipClick = handleSkipClick;
 
     window.addEventListener('DOMContentLoaded', () => {
         initTheme();
