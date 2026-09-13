@@ -1606,7 +1606,8 @@
             data[index][field] = value;
             saveData(storageKey, data);
             const dormName = storageKey.includes('girls') ? "Girls' Dorm" : "Boys' Dorm";
-            addLog(`Updated ${dormName} cleaning row ${index + 1}`);
+            const fieldName = field === 'area' ? 'Area' : 'Assigned Student';
+            addLog(`Updated ${dormName} cleaning row ${index + 1} (${fieldName}): "${value}"`);
         }
     }
 
