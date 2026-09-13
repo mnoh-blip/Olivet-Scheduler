@@ -1840,29 +1840,85 @@
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = async function(e) {
             try {
                 const importedObj = JSON.parse(e.target.result);
-                if (typeof importedObj !== 'object' || importedObj === null) throw new Error("Invalid object");
+
+                // A valid backup is an object containing olivet_* localStorage entries.
+                // localStorage values are strings, so individual values are not required
+                // to be JSON. This also keeps older/manual backups restorable.
+                if (
+                    typeof importedObj !== 'object' ||
+                    importedObj === null ||
+                    Array.isArray(importedObj)
+                ) {
+                    throw new Error('Invalid backup object');
+                }
+
+                const backupEntries = Object.entries(importedObj).filter(
+                    ([key, value]) => key.startsWith('olivet_') && typeof value === 'string'
+                );
+
+                if (backupEntries.length === 0) {
+                    throw new Error('No Olivet Scheduler backup entries found');
+                }
 
                 if (confirm('Importing this file will overwrite existing data. Continue?')) {
-                    Object.keys(importedObj).forEach(key => {
-                        if (key.startsWith('olivet_') && typeof importedObj[key] === 'string') {
-                            localStorage.setItem(key, importedObj[key]);
-                            const cleanKey = key.replace('olivet_', '');
-                            if (window.dbSaveData) {
-                                window.dbSaveData(cleanKey, JSON.parse(importedObj[key]));
+                    // Restore localStorage first. One bad/legacy entry must not abort
+                    // the entire restore operation.
+                    backupEntries.forEach(([key, value]) => {
+                        localStorage.setItem(key, value);
+                    });
+
+                    // Sync valid scheduler values to Firestore. Browser-only state is
+                    // intentionally kept local and is not uploaded as shared data.
+                    if (window.dbSaveData) {
+                        const excludedSyncKeys = new Set([
+                            'auth_user',
+                            'user_id',
+                            'activity_logs',
+                            'dark_mode',
+                            'tutorial_completed',
+                            'undo_backup'
+                        ]);
+
+                        for (const [key, value] of backupEntries) {
+                            const cleanKey = key.replace(/^olivet_/, '');
+                            if (excludedSyncKeys.has(cleanKey)) continue;
+
+                            try {
+                                const parsedValue = JSON.parse(value);
+                                await window.dbSaveData(cleanKey, parsedValue);
+                            } catch (parseError) {
+                                console.warn(
+                                    `Skipping Firestore sync for non-JSON backup entry "${key}".`,
+                                    parseError
+                                );
                             }
                         }
-                    });
+                    }
+
                     addLog('Restored data from backup file');
-                    alert('Data successfully restored!');
+                    alert(`Data successfully restored! (${backupEntries.length} items)`);
                     location.reload();
                 }
             } catch (err) {
-                alert('Invalid JSON backup file or corrupted data.');
+                console.error('Backup restore error:', err);
+                alert(
+                    'Invalid JSON backup file or corrupted data.\n\n' +
+                    'Please make sure you selected an Olivet Scheduler .json backup file.'
+                );
+            } finally {
+                // Allow selecting the same backup file again.
+                event.target.value = '';
             }
         };
+
+        reader.onerror = function() {
+            alert('Could not read the backup file.');
+            event.target.value = '';
+        };
+
         reader.readAsText(file);
     }
 
