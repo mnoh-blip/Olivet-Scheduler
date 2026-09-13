@@ -320,6 +320,7 @@
             <i class="fa-solid fa-circle-user"></i>
             <span id="userNicknameSpan">Guest</span>
             <span id="adminBadge" class="admin-badge admin-only">ADMIN</span>
+            <span id="syncStatus" title="Realtime sync status" style="font-size:0.7rem; opacity:0.8;">● Live</span>
         </div>
         <button class="login-btn" id="loginBtn" onclick="handleGoogleLogin()">
             <i class="fa-solid fa-right-to-bracket" id="loginIcon"></i> <span id="loginBtnText">Login</span>
@@ -576,66 +577,50 @@
     /*
      * FIRESTORE SYNC
      *
-     * Normal scheduler data:
-     *   schedulerData/{key}
+     * schedulerData/{key}
+     *   - Shared scheduler data.
+     *   - Saves use a transaction so two users don't blindly overwrite
+     *     a document from an old local copy.
      *
-     * Activity logs:
-     *   activityLogs/{auto-id}
-     *
-     * Logs are stored as separate documents instead of one shared array.
-     * This prevents simultaneous users from overwriting each other's logs.
+     * activityLogs/{auto-id}
+     *   - ONE Firestore document per activity.
+     *   - This is the important part for activity logs: users can add logs
+     *     simultaneously without replacing the whole shared log array.
      */
-    window.dbSaveData = async function(key, data) {
-        try {
-            const ref = doc(db, "schedulerData", key);
 
-            await runTransaction(db, async (transaction) => {
-                const snap = await transaction.get(ref);
+    const realtimeUnsubscribers = new Map();
+    let activityLogsUnsubscribe = null;
+    let activityLogsReady = false;
+    let activityLogWriteChain = Promise.resolve();
 
-                if (!snap.exists()) {
-                    transaction.set(ref, { value: data });
-                    return;
-                }
-
-                if (data === null) {
-                    transaction.set(ref, { value: null });
-                    return;
-                }
-
-                const serverValue = snap.data().value;
-                const merged = mergeRemoteData(serverValue, data);
-
-                transaction.set(ref, { value: merged });
-            });
-        } catch (e) {
-            console.error("Firestore Save Error:", e);
-        }
-    };
+    function isPlainObject(value) {
+        return value !== null &&
+               typeof value === 'object' &&
+               !Array.isArray(value);
+    }
 
     /*
-     * Merge the latest Firestore value with the local edit.
-     * This is safer than blindly replacing the entire shared document.
-     * Same-field simultaneous edits are intentionally last-write-wins.
+     * Merge objects field-by-field.
+     *
+     * For arrays, preserve the latest remote array and merge local indexes.
+     * This reduces accidental loss when two users edit different fields.
+     * A true conflict on the exact same field remains last-write-wins.
      */
     function mergeRemoteData(remote, local) {
         if (Array.isArray(remote) && Array.isArray(local)) {
             const result = remote.slice();
 
-            local.forEach((value, index) => {
-                if (
-                    value &&
-                    typeof value === 'object' &&
-                    !Array.isArray(value) &&
-                    result[index] &&
-                    typeof result[index] === 'object' &&
-                    !Array.isArray(result[index])
-                ) {
-                    result[index] = mergeRemoteData(result[index], value);
+            local.forEach((localValue, index) => {
+                const remoteValue = result[index];
+
+                if (isPlainObject(localValue) && isPlainObject(remoteValue)) {
+                    result[index] = mergeRemoteData(remoteValue, localValue);
                 } else {
-                    result[index] = value;
+                    result[index] = localValue;
                 }
             });
 
+            // Respect an intentional local deletion from the end.
             if (local.length < result.length) {
                 result.length = local.length;
             }
@@ -643,28 +628,17 @@
             return result;
         }
 
-        if (
-            remote &&
-            typeof remote === 'object' &&
-            !Array.isArray(remote) &&
-            local &&
-            typeof local === 'object' &&
-            !Array.isArray(local)
-        ) {
+        if (isPlainObject(remote) && isPlainObject(local)) {
             const result = { ...remote };
 
             Object.keys(local).forEach(key => {
-                if (
-                    local[key] &&
-                    typeof local[key] === 'object' &&
-                    !Array.isArray(local[key]) &&
-                    result[key] &&
-                    typeof result[key] === 'object' &&
-                    !Array.isArray(result[key])
-                ) {
-                    result[key] = mergeRemoteData(result[key], local[key]);
+                const localValue = local[key];
+                const remoteValue = result[key];
+
+                if (isPlainObject(localValue) && isPlainObject(remoteValue)) {
+                    result[key] = mergeRemoteData(remoteValue, localValue);
                 } else {
-                    result[key] = local[key];
+                    result[key] = localValue;
                 }
             });
 
@@ -674,77 +648,180 @@
         return local;
     }
 
+    window.dbSaveData = async function(key, data) {
+        if (!window.firebaseAuth?.currentUser) {
+            console.warn(`Firestore save skipped for "${key}": user is not authenticated.`);
+            return;
+        }
+
+        try {
+            const ref = doc(db, "schedulerData", key);
+
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(ref);
+
+                if (data === null) {
+                    transaction.set(ref, { value: null });
+                    return;
+                }
+
+                if (!snap.exists()) {
+                    transaction.set(ref, { value: data });
+                    return;
+                }
+
+                const remoteValue = snap.data().value;
+                const mergedValue = mergeRemoteData(remoteValue, data);
+
+                transaction.set(
+                    ref,
+                    {
+                        value: mergedValue,
+                        updatedAtMs: Date.now(),
+                        updatedBy: window.firebaseAuth.currentUser.uid
+                    },
+                    { merge: true }
+                );
+            });
+        } catch (error) {
+            console.error(`Firestore save error for "${key}":`, error);
+        }
+    };
+
     window.dbListenData = function(key, callback) {
-        return onSnapshot(
+        if (realtimeUnsubscribers.has(key)) {
+            realtimeUnsubscribers.get(key)();
+            realtimeUnsubscribers.delete(key);
+        }
+
+        const unsubscribe = onSnapshot(
             doc(db, "schedulerData", key),
             (docSnap) => {
-                if (docSnap.exists()) {
-                    callback(docSnap.data().value);
-                } else {
-                    callback(null);
-                }
+                callback(
+                    docSnap.exists()
+                        ? docSnap.data().value
+                        : null
+                );
             },
             (error) => {
                 console.error(`Firestore listener error for "${key}":`, error);
             }
         );
+
+        realtimeUnsubscribers.set(key, unsubscribe);
+        return unsubscribe;
     };
 
-    /* =========================
-       SHARED ACTIVITY LOGS
-       ========================= */
+    /*
+     * SHARED ACTIVITY LOGS
+     *
+     * Never write activity_logs as one array to schedulerData.
+     * Every log gets its own Firestore document.
+     */
 
-    let activityLogsUnsubscribe = null;
+    window.dbAddLog = function(logEntry) {
+        /*
+         * Queue log writes so rapid edits don't create a burst of competing
+         * operations in the same browser.
+         */
+        activityLogWriteChain = activityLogWriteChain
+            .then(async () => {
+                const user = window.firebaseAuth?.currentUser;
 
-    window.dbAddLog = async function(logEntry) {
-        try {
-            await addDoc(collection(db, "activityLogs"), {
-                user: logEntry.user || "Guest",
-                action: logEntry.action || "",
-                timestamp: logEntry.timestamp || new Date().toLocaleString('en-US', {
-                    dateStyle: 'short',
-                    timeStyle: 'short'
-                }),
-                createdAtMs: Date.now(),
-                uid: window.firebaseAuth?.currentUser?.uid || null
+                if (!user) {
+                    console.warn("Activity log skipped: user is not authenticated.");
+                    return;
+                }
+
+                const createdAtMs = Number.isFinite(logEntry.createdAtMs)
+                    ? logEntry.createdAtMs
+                    : Date.now();
+
+                await addDoc(collection(db, "activityLogs"), {
+                    user: logEntry.user || user.email?.split("@")[0] || "User",
+                    action: logEntry.action || "",
+                    timestamp: logEntry.timestamp || new Date().toLocaleString(
+                        "en-US",
+                        { dateStyle: "short", timeStyle: "short" }
+                    ),
+                    createdAtMs,
+                    uid: user.uid
+                });
+            })
+            .catch(error => {
+                console.error("Firestore activity log error:", error);
             });
-        } catch (e) {
-            console.error("Firestore Activity Log Error:", e);
-        }
+
+        return activityLogWriteChain;
     };
 
     window.initActivityLogSync = function() {
         if (activityLogsUnsubscribe) {
             activityLogsUnsubscribe();
+            activityLogsUnsubscribe = null;
         }
 
+        /*
+         * Keep the query simple: one single-field orderBy + limit.
+         * No composite index is required.
+         */
         const logsQuery = query(
             collection(db, "activityLogs"),
             orderBy("createdAtMs", "desc"),
             limit(100)
         );
 
+        activityLogsReady = false;
+
         activityLogsUnsubscribe = onSnapshot(
             logsQuery,
             (snapshot) => {
-                const logs = snapshot.docs.map(d => ({
-                    id: d.id,
-                    ...d.data()
+                const remoteLogs = snapshot.docs.map(logDoc => ({
+                    id: logDoc.id,
+                    ...logDoc.data()
                 }));
 
-                localStorage.setItem(
-                    'olivet_activity_logs',
-                    JSON.stringify(logs)
+                /*
+                 * During the initial snapshot, don't throw away an optimistic
+                 * local log that has just been created but hasn't reached the
+                 * server snapshot yet.
+                 */
+                const pendingLocalLogs = !activityLogsReady
+                    ? getData("activity_logs", []).filter(localLog => {
+                        if (!localLog || !localLog.createdAtMs) return false;
+
+                        return !remoteLogs.some(remoteLog =>
+                            remoteLog.createdAtMs === localLog.createdAtMs &&
+                            remoteLog.user === localLog.user &&
+                            remoteLog.action === localLog.action
+                        );
+                    })
+                    : [];
+
+                const combined = [...pendingLocalLogs, ...remoteLogs];
+
+                combined.sort(
+                    (a, b) =>
+                        (Number(b.createdAtMs) || 0) -
+                        (Number(a.createdAtMs) || 0)
                 );
+
+                const trimmed = combined.slice(0, 100);
+
+                localStorage.setItem(
+                    "olivet_activity_logs",
+                    JSON.stringify(trimmed)
+                );
+
+                activityLogsReady = true;
 
                 if (window.renderLogs) {
                     window.renderLogs();
                 }
             },
             (error) => {
-                console.error("Activity Log listener error:", error);
+                console.error("Activity log listener error:", error);
 
-                // Keep local logs visible if Firestore is temporarily unavailable.
                 if (window.renderLogs) {
                     window.renderLogs();
                 }
@@ -753,26 +830,44 @@
     };
 
     window.dbClearLogs = async function() {
+        if (!window.firebaseAuth?.currentUser) {
+            throw new Error("You must be signed in to clear activity logs.");
+        }
+
         try {
+            /*
+             * Firestore batch writes are limited to 500 operations.
+             * Delete in chunks so the Clear Logs button also works when
+             * there are more than 500 historical logs.
+             */
             const snapshot = await getDocs(collection(db, "activityLogs"));
 
             if (snapshot.empty) return;
 
-            const batch = writeBatch(db);
+            for (let i = 0; i < snapshot.docs.length; i += 500) {
+                const batch = writeBatch(db);
+                const chunk = snapshot.docs.slice(i, i + 500);
 
-            snapshot.docs.forEach(logDoc => {
-                batch.delete(logDoc.ref);
-            });
+                chunk.forEach(logDoc => batch.delete(logDoc.ref));
 
-            await batch.commit();
-        } catch (e) {
-            console.error("Firestore Clear Logs Error:", e);
-            throw e;
+                await batch.commit();
+            }
+        } catch (error) {
+            console.error("Firestore clear logs error:", error);
+            throw error;
         }
     };
 
     // 실시간 동기화 설정 함수
+    let realtimeSyncStarted = false;
+
     window.initRealtimeSync = function() {
+        if (realtimeSyncStarted) {
+            return;
+        }
+
+        realtimeSyncStarted = true;
+
         const syncKeys = [
             'meals',
             'meal_sticker_votes',
@@ -784,52 +879,49 @@
 
         syncKeys.forEach(key => {
             window.dbListenData(key, (remoteVal) => {
-                if (remoteVal !== null) {
-                    const localVal = localStorage.getItem('olivet_' + key);
-                    const remoteJson = JSON.stringify(remoteVal);
+                if (remoteVal === null) return;
 
-                    if (localVal !== remoteJson) {
-                        localStorage.setItem(
-                            'olivet_' + key,
-                            remoteJson
-                        );
+                const remoteJson = JSON.stringify(remoteVal);
+                const localVal = localStorage.getItem('olivet_' + key);
 
-                        refreshUIByKey(key);
-                    }
+                if (localVal !== remoteJson) {
+                    localStorage.setItem('olivet_' + key, remoteJson);
+                    refreshUIByKey(key);
                 }
             });
         });
 
-        // Activity logs are synchronized through their own collection.
+        // Activity logs use their own collection and realtime listener.
         window.initActivityLogSync();
 
-        // 학년별 시간표 & 메모 리스너 등록
+        // Grade schedules.
         [6, 7, 8, 9, 10, 11, 12].forEach(g => {
             const schedKey = `schedule_g${g}`;
 
             window.dbListenData(schedKey, (remoteVal) => {
-                if (remoteVal !== null) {
-                    const localVal = localStorage.getItem('olivet_' + schedKey);
-                    const remoteJson = JSON.stringify(remoteVal);
+                if (remoteVal === null) return;
 
-                    if (localVal !== remoteJson) {
-                        localStorage.setItem(
-                            'olivet_' + schedKey,
-                            remoteJson
-                        );
+                const remoteJson = JSON.stringify(remoteVal);
+                const localVal = localStorage.getItem('olivet_' + schedKey);
 
-                        const curGrade =
-                            document.getElementById('gradeSelect')?.value;
+                if (localVal === remoteJson) return;
 
-                        const active = document.activeElement;
+                localStorage.setItem('olivet_' + schedKey, remoteJson);
 
-                        if (
-                            String(curGrade) === String(g) &&
-                            !(active && active.classList.contains('auto-expand'))
-                        ) {
-                            window.loadScheduleAndSideNotes();
-                        }
-                    }
+                const gradeSelect = document.getElementById('gradeSelect');
+                const curGrade = gradeSelect?.value;
+                const active = document.activeElement;
+
+                /*
+                 * Don't rebuild a schedule while the user is typing.
+                 * The newest remote value is already in localStorage and will
+                 * be used by the next save.
+                 */
+                if (
+                    String(curGrade) === String(g) &&
+                    !(active && active.classList?.contains('auto-expand'))
+                ) {
+                    window.loadScheduleAndSideNotes();
                 }
             });
 
@@ -838,39 +930,30 @@
                     const sideKey = `side_${sideId}_g${g}`;
 
                     window.dbListenData(sideKey, (remoteVal) => {
-                        if (remoteVal !== null) {
-                            const localVal =
-                                localStorage.getItem('olivet_' + sideKey);
+                        if (remoteVal === null) return;
 
-                            if (
-                                localVal !== JSON.stringify(remoteVal)
-                            ) {
-                                localStorage.setItem(
-                                    'olivet_' + sideKey,
-                                    JSON.stringify(remoteVal)
-                                );
+                        const remoteJson = JSON.stringify(remoteVal);
+                        const localVal = localStorage.getItem('olivet_' + sideKey);
 
-                                const curGrade =
-                                    document.getElementById('gradeSelect')?.value;
+                        if (localVal === remoteJson) return;
 
-                                if (String(curGrade) === String(g)) {
-                                    const elem =
-                                        document.getElementById(sideId);
+                        localStorage.setItem(
+                            'olivet_' + sideKey,
+                            remoteJson
+                        );
 
-                                    if (
-                                        elem &&
-                                        document.activeElement !== elem
-                                    ) {
-                                        elem.value = remoteVal;
+                        const curGrade =
+                            document.getElementById('gradeSelect')?.value;
 
-                                        if (window.autoResizeTextarea) {
-                                            window.autoResizeTextarea(
-                                                elem,
-                                                80
-                                            );
-                                        }
-                                    }
-                                }
+                        if (String(curGrade) !== String(g)) return;
+
+                        const elem = document.getElementById(sideId);
+
+                        if (elem && document.activeElement !== elem) {
+                            elem.value = remoteVal;
+
+                            if (window.autoResizeTextarea) {
+                                window.autoResizeTextarea(elem, 80);
                             }
                         }
                     });
@@ -906,8 +989,8 @@
         if (currentUser && currentUser.nickname) {
             if (confirm('Are you sure you want to logout?')) {
                 try {
-                    await signOut(auth);
                     if (window.addLog) window.addLog('Logged out');
+                    await signOut(auth);
                     localStorage.removeItem('olivet_auth_user');
                     localStorage.removeItem('olivet_user_id');
                     window.initAuthUI();
@@ -949,14 +1032,26 @@
 
     onAuthStateChanged(auth, (user) => {
         if (user && user.email) {
+            const status = document.getElementById('syncStatus');
+            if (status) {
+                status.textContent = '● Live';
+                status.title = 'Connected to realtime Firestore sync';
+            }
+
             const email = user.email.toLowerCase();
             const nickname = email.split('@')[0];
             const userData = { email: email, nickname: nickname, photoURL: user.photoURL || '' };
-            if (window.saveData) window.saveData('auth_user', userData);
+            localStorage.setItem('olivet_auth_user', JSON.stringify(userData));
             localStorage.setItem('olivet_user_id', nickname);
             if (window.initAuthUI) window.initAuthUI();
             if (window.initRealtimeSync) window.initRealtimeSync();
         } else {
+            const status = document.getElementById('syncStatus');
+            if (status) {
+                status.textContent = '○ Offline';
+                status.title = 'Sign in to enable shared realtime data';
+            }
+
             localStorage.removeItem('olivet_auth_user');
             if (window.initAuthUI) window.initAuthUI();
         }
@@ -1063,25 +1158,31 @@
     }
 
     function addLog(actionDescription) {
-        const currentUser =
-            getData('auth_user', { nickname: 'Guest' });
+        const currentUser = getData(
+            'auth_user',
+            { nickname: 'Guest' }
+        );
 
         const displayUser =
-            currentUser?.nickname || 'Guest';
+            currentUser?.nickname ||
+            window.firebaseAuth?.currentUser?.email?.split('@')[0] ||
+            'Guest';
+
+        const createdAtMs = Date.now();
 
         const logEntry = {
             user: displayUser,
             action: actionDescription,
-            timestamp: new Date().toLocaleString('en-US', {
-                dateStyle: 'short',
-                timeStyle: 'short'
-            }),
-            createdAtMs: Date.now()
+            timestamp: new Date().toLocaleString(
+                'en-US',
+                { dateStyle: 'short', timeStyle: 'short' }
+            ),
+            createdAtMs
         };
 
         /*
-         * Optimistic local display.
-         * Firestore is the shared source of truth.
+         * Optimistic UI: show it immediately on this browser.
+         * Firestore then becomes the shared source of truth.
          */
         const logs = getData('activity_logs', []);
 
@@ -1100,8 +1201,8 @@
 
         /*
          * IMPORTANT:
-         * Do NOT save the whole activity_logs array to Firestore here.
-         * Each log is now an individual Firestore document.
+         * Do NOT call saveData('activity_logs', logs).
+         * Each activity is a separate Firestore document.
          */
         if (window.dbAddLog) {
             window.dbAddLog(logEntry);
@@ -1141,27 +1242,24 @@
     async function clearLogs() {
         if (!isAdminUser()) return;
 
-        if (
-            confirm(
-                'Are you sure you want to clear all activity logs?'
-            )
-        ) {
-            try {
-                if (window.dbClearLogs) {
-                    await window.dbClearLogs();
-                }
+        if (!confirm('Are you sure you want to clear all activity logs?')) {
+            return;
+        }
 
-                localStorage.setItem(
-                    'olivet_activity_logs',
-                    '[]'
-                );
-
-                renderLogs();
-            } catch (e) {
-                alert(
-                    'Failed to clear activity logs. Please try again.'
-                );
+        try {
+            if (window.dbClearLogs) {
+                await window.dbClearLogs();
             }
+
+            localStorage.setItem(
+                'olivet_activity_logs',
+                '[]'
+            );
+
+            renderLogs();
+        } catch (error) {
+            console.error(error);
+            alert('Failed to clear activity logs. Please try again.');
         }
     }
 
