@@ -656,35 +656,62 @@
 
         try {
             const ref = doc(db, "schedulerData", key);
+            const user = window.firebaseAuth.currentUser;
 
             await runTransaction(db, async (transaction) => {
                 const snap = await transaction.get(ref);
 
                 if (data === null) {
-                    transaction.set(ref, { value: null });
+                    transaction.set(ref, {
+                        value: null,
+                        updatedAtMs: Date.now(),
+                        updatedBy: user.uid
+                    }, { merge: true });
                     return;
                 }
 
-                if (!snap.exists()) {
-                    transaction.set(ref, { value: data });
+                if (!snap.exists() || snap.data().value === null || snap.data().value === undefined) {
+                    transaction.set(ref, {
+                        value: data,
+                        updatedAtMs: Date.now(),
+                        updatedBy: user.uid
+                    }, { merge: true });
                     return;
                 }
 
                 const remoteValue = snap.data().value;
                 const mergedValue = mergeRemoteData(remoteValue, data);
 
-                transaction.set(
-                    ref,
-                    {
-                        value: mergedValue,
-                        updatedAtMs: Date.now(),
-                        updatedBy: window.firebaseAuth.currentUser.uid
-                    },
-                    { merge: true }
-                );
+                transaction.set(ref, {
+                    value: mergedValue,
+                    updatedAtMs: Date.now(),
+                    updatedBy: user.uid
+                }, { merge: true });
             });
         } catch (error) {
             console.error(`Firestore save error for "${key}":`, error);
+        }
+    };
+
+    // Upload local scheduler data only when a corresponding Firestore document
+    // does not exist yet. This prevents a new browser from overwriting shared data
+    // while still recovering data that was entered before the first successful sync.
+    window.dbSyncLocalIfMissing = async function(key, data) {
+        if (!window.firebaseAuth?.currentUser || data === undefined) return;
+
+        try {
+            const ref = doc(db, "schedulerData", key);
+            const snap = await getDocs(query(collection(db, "schedulerData")));
+            const existing = snap.docs.find(d => d.id === key);
+            if (!existing) {
+                await setDoc(ref, {
+                    value: data,
+                    updatedAtMs: Date.now(),
+                    updatedBy: window.firebaseAuth.currentUser.uid
+                });
+            }
+        } catch (error) {
+            console.error(`Firestore initial sync error for "${key}":`, error);
         }
     };
 
@@ -862,10 +889,7 @@
     let realtimeSyncStarted = false;
 
     window.initRealtimeSync = function() {
-        if (realtimeSyncStarted) {
-            return;
-        }
-
+        if (realtimeSyncStarted) return;
         realtimeSyncStarted = true;
 
         const syncKeys = [
@@ -877,88 +901,103 @@
             'boysDormData'
         ];
 
-        syncKeys.forEach(key => {
+        // Also listen to every calendar month already stored locally.
+        Object.keys(localStorage)
+            .filter(k => k.startsWith('olivet_calendar_'))
+            .forEach(k => syncKeys.push(k.replace('olivet_', '')));
+
+        const uniqueKeys = [...new Set(syncKeys)];
+
+        const attachListener = (key) => {
             window.dbListenData(key, (remoteVal) => {
-                if (remoteVal === null) return;
+                if (remoteVal === null || remoteVal === undefined) return;
 
                 const remoteJson = JSON.stringify(remoteVal);
                 const localVal = localStorage.getItem('olivet_' + key);
-
-                if (localVal !== remoteJson) {
-                    localStorage.setItem('olivet_' + key, remoteJson);
-                    refreshUIByKey(key);
-                }
-            });
-        });
-
-        // Activity logs use their own collection and realtime listener.
-        window.initActivityLogSync();
-
-        // Grade schedules.
-        [6, 7, 8, 9, 10, 11, 12].forEach(g => {
-            const schedKey = `schedule_g${g}`;
-
-            window.dbListenData(schedKey, (remoteVal) => {
-                if (remoteVal === null) return;
-
-                const remoteJson = JSON.stringify(remoteVal);
-                const localVal = localStorage.getItem('olivet_' + schedKey);
-
                 if (localVal === remoteJson) return;
 
-                localStorage.setItem('olivet_' + schedKey, remoteJson);
-
-                const gradeSelect = document.getElementById('gradeSelect');
-                const curGrade = gradeSelect?.value;
+                // Never replace localStorage while any textarea is being edited.
+                // The old code replaced localStorage first, which could make the
+                // pending debounced save read the remote value and lose the user's input.
                 const active = document.activeElement;
+                if (active && active.tagName === 'TEXTAREA') return;
 
-                /*
-                 * Don't rebuild a schedule while the user is typing.
-                 * The newest remote value is already in localStorage and will
-                 * be used by the next save.
-                 */
-                if (
-                    String(curGrade) === String(g) &&
-                    !(active && active.classList?.contains('auto-expand'))
-                ) {
-                    window.loadScheduleAndSideNotes();
+                localStorage.setItem('olivet_' + key, remoteJson);
+                refreshUIByKey(key);
+            });
+        };
+
+        uniqueKeys.forEach(attachListener);
+        window.initActivityLogSync();
+
+        [6, 7, 8, 9, 10, 11, 12].forEach(g => {
+            const schedKey = `schedule_g${g}`;
+            attachListener(schedKey);
+
+            ['sideBring', 'sideAnnounce', 'sideTodo', 'sideTodoGreen'].forEach(sideId => {
+                const sideKey = `side_${sideId}_g${g}`;
+                window.dbListenData(sideKey, (remoteVal) => {
+                    if (remoteVal === null || remoteVal === undefined) return;
+
+                    const remoteJson = JSON.stringify(remoteVal);
+                    const localVal = localStorage.getItem('olivet_' + sideKey);
+                    if (localVal === remoteJson) return;
+
+                    const elem = document.getElementById(sideId);
+                    if (elem && document.activeElement === elem) return;
+
+                    localStorage.setItem('olivet_' + sideKey, remoteJson);
+
+                    const curGrade = document.getElementById('gradeSelect')?.value;
+                    if (String(curGrade) !== String(g)) return;
+
+                    elem.value = remoteVal;
+                    if (window.autoResizeTextarea) window.autoResizeTextarea(elem, 80);
+                });
+            });
+        });
+
+        // Calendar is dynamic: subscribe to the month whenever it is rendered.
+        window.listenCalendarData = function(calDataKey) {
+            if (realtimeUnsubscribers.has(calDataKey)) return;
+            window.dbListenData(calDataKey, (remoteVal) => {
+                if (remoteVal === null || remoteVal === undefined) return;
+
+                const remoteJson = JSON.stringify(remoteVal);
+                const localVal = localStorage.getItem('olivet_' + calDataKey);
+                if (localVal === remoteJson) return;
+
+                const active = document.activeElement;
+                if (active && active.tagName === 'TEXTAREA') return;
+
+                localStorage.setItem('olivet_' + calDataKey, remoteJson);
+                if (window.renderCalendar) window.renderCalendar();
+            });
+        };
+
+        uniqueKeys
+            .filter(k => k.startsWith('calendar_'))
+            .forEach(k => window.listenCalendarData(k));
+
+        // If this browser already contains scheduler data, initialize missing
+        // Firestore documents without overwriting documents that other users have.
+        const excluded = new Set([
+            'auth_user', 'user_id', 'activity_logs', 'dark_mode',
+            'tutorial_completed', 'undo_backup'
+        ]);
+
+        Object.keys(localStorage)
+            .filter(k => k.startsWith('olivet_'))
+            .forEach(k => {
+                const cleanKey = k.replace('olivet_', '');
+                if (excluded.has(cleanKey)) return;
+                try {
+                    const data = JSON.parse(localStorage.getItem(k));
+                    window.dbSyncLocalIfMissing(cleanKey, data);
+                } catch (e) {
+                    console.warn('Skipping invalid local scheduler data:', cleanKey);
                 }
             });
-
-            ['sideBring', 'sideAnnounce', 'sideTodo', 'sideTodoGreen']
-                .forEach(sideId => {
-                    const sideKey = `side_${sideId}_g${g}`;
-
-                    window.dbListenData(sideKey, (remoteVal) => {
-                        if (remoteVal === null) return;
-
-                        const remoteJson = JSON.stringify(remoteVal);
-                        const localVal = localStorage.getItem('olivet_' + sideKey);
-
-                        if (localVal === remoteJson) return;
-
-                        localStorage.setItem(
-                            'olivet_' + sideKey,
-                            remoteJson
-                        );
-
-                        const curGrade =
-                            document.getElementById('gradeSelect')?.value;
-
-                        if (String(curGrade) !== String(g)) return;
-
-                        const elem = document.getElementById(sideId);
-
-                        if (elem && document.activeElement !== elem) {
-                            elem.value = remoteVal;
-
-                            if (window.autoResizeTextarea) {
-                                window.autoResizeTextarea(elem, 80);
-                            }
-                        }
-                    });
-                });
-        });
     };
 
     function refreshUIByKey(key) {
@@ -1104,7 +1143,8 @@
     }
 
     function saveData(key, data) {
-        localStorage.setItem('olivet_' + key, JSON.stringify(data));
+        const json = JSON.stringify(data);
+        localStorage.setItem('olivet_' + key, json);
         if (window.dbSaveData) {
             window.dbSaveData(key, data);
         }
@@ -1737,6 +1777,7 @@
         monthYearElem.textContent = `${new Date(year, month).toLocaleString('en-US', { month: 'long' })} ${year}`;
 
         const calDataKey = `calendar_${year}_${month}`;
+        if (window.listenCalendarData) window.listenCalendarData(calDataKey);
         const savedCalData = getData(calDataKey, {});
 
         for (let i = 0; i < firstDay; i++) {
@@ -2086,6 +2127,23 @@
         renderLogs();
 
         window.addEventListener('resize', resizeAllTextareas);
+
+        // Keep a synchronous local snapshot of every textarea on each keystroke.
+        // This makes sharing/reloading safe even if the 300ms debounce has not fired yet.
+        document.addEventListener('input', (event) => {
+            if (event.target && event.target.tagName === 'TEXTAREA') {
+                const active = event.target;
+                // The normal debounced save remains responsible for Firestore.
+                // This handler intentionally does not guess the storage key.
+                // It only prevents browser-level accidental loss by marking the page dirty.
+                window.__olivetUnsavedInput = true;
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            // Give pending debounce callbacks their normal chance to finish.
+            // localStorage already contains the last committed value.
+        });
     });
 </script>
 
